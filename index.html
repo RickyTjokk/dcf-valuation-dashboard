@@ -542,6 +542,37 @@
                   <input id="inpDdmG2" type="number" step="0.5" placeholder="Kosong = ikut DCF g2" class="tabular-nums" />
                 </div>
               </div>
+
+              <!-- Peter Lynch (PEGY) Sub-section -->
+              <div class="ddm-divider"></div>
+              <div class="card-header mb-1" style="margin-bottom:4px">
+                <div>
+                  <h3 class="card-title" style="font-size:14px">Peter Lynch (PEGY Growth) <span class="tip" title="Rumus GARP Peter Lynch: Harga Wajar = EPS × (Growth% + Div Yield%), menggunakan asumsi growth g1 (maks 25%).">?</span></h3>
+                  <p class="card-desc">Ideal untuk menilai Growth Stock &amp; Stalwart secara cepat tanpa input tambahan.</p>
+                </div>
+              </div>
+              <label class="toggle-box">
+                <div>
+                  <div class="font-semibold">Gabungkan Peter Lynch (PEGY) ke Harga Wajar</div>
+                  <div class="text-muted text-xs">Menghitung P/E wajar setara asumsi growth g1 (cap 25%) + dividen yield.</div>
+                </div>
+                <input id="chkIncludeLynch" type="checkbox" />
+              </label>
+
+              <div class="lynch-stats-grid">
+                <div class="stat-card" style="padding:8px 10px">
+                  <div class="stat-label">PEGY Ratio</div>
+                  <div id="dispLynchPegy" class="stat-val tabular-nums" style="font-size:15px">-</div>
+                </div>
+                <div class="stat-card" style="padding:8px 10px">
+                  <div class="stat-label">Kategori Lynch</div>
+                  <div id="dispLynchCat" class="stat-val" style="font-size:13px">-</div>
+                </div>
+                <div class="stat-card" style="padding:8px 10px">
+                  <div class="stat-label">Lynch Fair Value</div>
+                  <div id="dispLynchVal" class="stat-val tabular-nums" style="font-size:15px">-</div>
+                </div>
+              </div>
             </div>
           </div>
         </div>

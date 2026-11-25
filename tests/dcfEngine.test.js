@@ -89,4 +89,36 @@ test('V5: 2-Stage DDM, Graham Number, and preset DCF parity with includeDdm=fals
   assert.ok(Math.abs(resZeroDps.fvFinal - (resZeroDps.iv + resZeroDps.rv) / 2) < 0.01);
 });
 
+test('V6: Peter Lynch PEGY, Fair Value with 25% growth cap, categories, and includeLynch toggle', () => {
+  const cmry = PRESETS.find((p) => p.ticker === 'CMRY');
+  assert.strictEqual(cmry.includeLynch, false);
+
+  const resOff = computeDCF(cmry);
+  // CMRY: g1=0.15 -> 15%, plus divYield = 90 / 4150 * 100
+  const expectedMult = 15 + (cmry.dps / cmry.price) * 100;
+  const expectedLynch = resOff.epsBase * expectedMult;
+  assert.ok(Math.abs(resOff.lynchValue - expectedLynch) < 0.01);
+  assert.strictEqual(resOff.lynchCategory.key, 'fast');
+  // With includeLynch=false, fvFinal keeps exact v4/v5 parity
+  assert.ok(Math.abs(resOff.fvFinal - (resOff.iv + resOff.rv) / 2) < 0.01);
+
+  // When g1 > 0.25 (e.g., 40%), lynchGrowthPct must be capped at 25%
+  const resCapped = computeDCF({ ...cmry, g1: 0.4, dps: 0 });
+  assert.strictEqual(resCapped.lynchGrowthPct, 25);
+  assert.ok(Math.abs(resCapped.lynchValue - resCapped.epsBase * 25) < 0.01);
+
+  // Cyclical guardrail check when predictability is low
+  const adro = PRESETS.find((p) => p.ticker === 'ADRO');
+  const adroRes = computeDCF(adro);
+  assert.strictEqual(adroRes.lynchCategory.key, 'cyclical');
+
+  // When includeLynch=true, fvFinal averages active methods (DCF + Rel + Lynch)
+  const resOn = computeDCF({ ...cmry, includeLynch: true });
+  const expectedAvg = (resOn.iv + resOn.rv + resOn.lynchValue) / 3;
+  assert.ok(Math.abs(resOn.fvFinal - expectedAvg) < 0.01);
+  assert.ok(resOn.scenarios.bull.fv > resOn.scenarios.base.fv);
+  assert.ok(resOn.scenarios.base.fv > resOn.scenarios.bear.fv);
+});
+
+
 

@@ -265,10 +265,29 @@ export function computeDCF(s, overrides = {}) {
   const grahamNumber = epsBase > 0 && bvps > 0 ? Math.sqrt(22.5 * epsBase * bvps) : 0;
   const grahamMos = grahamNumber > 0 ? 1 - price / grahamNumber : 0;
 
-  // Combined Fair Value: average of DCF + active optional methods (Relative, 2-Stage DDM)
+  // Peter Lynch Growth Valuation (PEGY / GARP) — active g1 capped at 25% + dividend yield
+  const lynchGrowthPct = Math.min(25, Math.max(0, g1 * 100));
+  const lynchDivPct = divYield * 100;
+  const lynchMultiple = lynchGrowthPct + lynchDivPct;
+  const lynchValue = epsBase > 0 && lynchMultiple > 0 ? epsBase * lynchMultiple : 0;
+  const currentPe = epsBase > 0 && price > 0 ? price / epsBase : 0;
+  const pegy = currentPe > 0 && lynchMultiple > 0 ? currentPe / lynchMultiple : 0;
+  const lynchMos = lynchValue > 0 ? 1 - price / lynchValue : 0;
+
+  let lynchCategory = { key: 'slow', label: 'Slow Grower', tone: 'muted' };
+  if (predictR < 0.55 || covOpm > 0.25) {
+    lynchCategory = { key: 'cyclical', label: 'Cyclical / Fluktuatif', tone: 'amber' };
+  } else if (g1 >= 0.15) {
+    lynchCategory = { key: 'fast', label: 'Fast Grower', tone: 'emerald' };
+  } else if (g1 >= 0.08) {
+    lynchCategory = { key: 'stalwart', label: 'Stalwart', tone: 'emerald' };
+  }
+
+  // Combined Fair Value: average of DCF + active optional methods (Relative, 2-Stage DDM, Peter Lynch)
   const fvComponents = [iv];
   if (s.includeRel && rv > 0) fvComponents.push(rv);
   if (s.includeDdm && ddmValue > 0) fvComponents.push(ddmValue);
+  if (s.includeLynch && lynchValue > 0) fvComponents.push(lynchValue);
   const fvFinal = fvComponents.reduce((a, b) => a + b, 0) / fvComponents.length;
   const mos = fvFinal > 0 ? 1 - price / fvFinal : 0;
   const impliedPe = epsBase > 0 ? iv / epsBase : 0;
@@ -382,6 +401,13 @@ export function computeDCF(s, overrides = {}) {
     payoutRatio,
     grahamNumber,
     grahamMos,
+    lynchGrowthPct,
+    lynchMultiple,
+    lynchValue,
+    currentPe,
+    pegy,
+    lynchMos,
+    lynchCategory,
     fvFinal,
     mos,
     impliedPe,

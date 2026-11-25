@@ -276,6 +276,7 @@ function createBlankStock(ticker = 'NEW') {
     includeDdm: false,
     ddmG1: null,
     ddmG2: null,
+    includeLynch: false,
   };
 }
 
@@ -338,6 +339,7 @@ function syncInputsFromState() {
     state.ddmG1 !== null && state.ddmG1 !== undefined ? Number((state.ddmG1 * 100).toFixed(1)) : '';
   document.getElementById('inpDdmG2').value =
     state.ddmG2 !== null && state.ddmG2 !== undefined ? Number((state.ddmG2 * 100).toFixed(1)) : '';
+  document.getElementById('chkIncludeLynch').checked = !!state.includeLynch;
 
   renderHistoryTable();
   updateLiveBadge();
@@ -427,9 +429,29 @@ function renderAll() {
     .map((x) => `<div><span>${x.label}</span><span>${x.val > 0 ? fmtRp(x.val) : '-'}</span></div>`)
     .join('');
 
-  // Step 2 DDM live stats
+  // Step 2 DDM & Peter Lynch live stats
   document.getElementById('dispDivYield').textContent = fmtPct(res.divYield, 2);
   document.getElementById('dispPayoutRatio').textContent = res.payoutRatio > 0 ? fmtPct(res.payoutRatio, 1) : '-';
+
+  const pegyEl = document.getElementById('dispLynchPegy');
+  pegyEl.textContent = res.pegy > 0 ? `${res.pegy.toFixed(2)}x` : '-';
+  pegyEl.style.color =
+    res.pegy > 0
+      ? res.pegy < 1
+        ? 'var(--emerald)'
+        : res.pegy <= 1.5
+        ? 'var(--amber)'
+        : 'var(--rose)'
+      : 'var(--text-muted)';
+  const catEl = document.getElementById('dispLynchCat');
+  catEl.textContent = res.lynchCategory.label;
+  catEl.style.color =
+    res.lynchCategory.tone === 'emerald'
+      ? 'var(--emerald)'
+      : res.lynchCategory.tone === 'amber'
+      ? 'var(--amber)'
+      : 'var(--text-muted)';
+  document.getElementById('dispLynchVal').textContent = res.lynchValue > 0 ? fmtRp(res.lynchValue) : '-';
 
   // HERO VALUATION VERDICT (2-SIDED: QUALITY RING + VALUATION)
   renderQualityRing(document.getElementById('heroQualityRing'), {
@@ -447,6 +469,10 @@ function renderAll() {
   if (state.includeDdm && res.ddmValue > 0) {
     activeNames.push('DDM');
     subParts.push(`DDM: ${fmtRp(res.ddmValue)}`);
+  }
+  if (state.includeLynch && res.lynchValue > 0) {
+    activeNames.push('Lynch');
+    subParts.push(`Lynch: ${fmtRp(res.lynchValue)}`);
   }
   document.getElementById('heroMethodHint').textContent =
     activeNames.length > 1 ? activeNames.join(' + ') : 'Intrinsic Only';
@@ -536,20 +562,29 @@ function renderAll() {
 }
 
 function renderOverviewOut(res) {
-  // 4-Card Multi-Method Comparison Strip
+  // 5-Card Multi-Method Comparison Strip
   const relActive = !!(state.includeRel && res.rv > 0);
   const ddmActive = !!(state.includeDdm && res.ddmValue > 0);
+  const lynchActive = !!(state.includeLynch && res.lynchValue > 0);
   const gColor =
     res.grahamNumber > 0
       ? res.grahamMos >= 0
         ? 'var(--emerald)'
         : 'var(--amber)'
       : 'var(--text-muted)';
+  const lynchColor =
+    res.lynchValue > 0
+      ? res.pegy > 0 && res.pegy < 1
+        ? 'var(--emerald)'
+        : res.pegy <= 1.5
+        ? 'var(--amber)'
+        : 'var(--rose)'
+      : 'var(--text-muted)';
 
   document.getElementById('multiMethodStrip').innerHTML = `
     <div class="method-card is-active">
       <div class="method-top">
-        <span class="method-name">DCF 100Y (Intrinsic)</span>
+        <span class="method-name">DCF 100Y</span>
         <span class="mini-badge emerald">Aktif</span>
       </div>
       <div class="method-val tabular-nums">${fmtRp(res.iv)}</div>
@@ -558,7 +593,7 @@ function renderOverviewOut(res) {
 
     <div class="method-card ${relActive ? 'is-active' : ''}">
       <div class="method-top">
-        <span class="method-name">Relative PE / PBV</span>
+        <span class="method-name">Relative PE/PBV</span>
         <span class="mini-badge ${relActive ? 'emerald' : 'muted'}">${relActive ? 'Aktif' : 'Pembanding'}</span>
       </div>
       <div class="method-val tabular-nums">${res.rv > 0 ? fmtRp(res.rv) : '-'}</div>
@@ -572,6 +607,15 @@ function renderOverviewOut(res) {
       </div>
       <div class="method-val tabular-nums">${res.ddmValue > 0 ? fmtRp(res.ddmValue) : '-'}</div>
       <div class="method-sub tabular-nums">${res.dps > 0 ? `DPS ${fmtRp(res.dps)} &middot; Yield ${fmtPct(res.divYield, 1)}` : 'Isi DPS di Step 2'}</div>
+    </div>
+
+    <div class="method-card ${lynchActive ? 'is-active' : ''}" title="Peter Lynch Fair Value = EPS × (min(25, Growth%) + Yield%). PEGY < 1.0 berarti murah.">
+      <div class="method-top">
+        <span class="method-name">Peter Lynch <span class="tip" title="Rumus GARP Peter Lynch: EPS × (Growth g1% [cap 25%] + Div Yield%). PEGY < 1.0 = Murah, 1.0 = Wajar, > 1.5 = Mahal.">?</span></span>
+        <span class="mini-badge ${lynchActive ? 'emerald' : res.lynchCategory.tone}">${lynchActive ? 'Aktif' : res.lynchCategory.label}</span>
+      </div>
+      <div class="method-val tabular-nums" style="color:${lynchColor}">${res.lynchValue > 0 ? fmtRp(res.lynchValue) : '-'}</div>
+      <div class="method-sub tabular-nums">${res.pegy > 0 ? `PEGY ${res.pegy.toFixed(2)}x &middot; ${res.lynchCategory.label}` : 'Butuh EPS & Growth > 0'}</div>
     </div>
 
     <div class="method-card is-ref" title="Graham Number = √(22.5 × EPS × BVPS). Batas atas harga wajar ala Benjamin Graham (P/E ≤ 15 & PBV ≤ 1.5), hanya sebagai pembanding.">
@@ -610,6 +654,7 @@ function renderOverviewOut(res) {
   document.getElementById('overviewKpiChips').innerHTML = `
     <span class="chip">DCF: <strong>${fmtRp(res.iv)}</strong></span>
     ${state.includeDdm && res.ddmValue > 0 ? `<span class="chip">DDM: <strong>${fmtRp(res.ddmValue)}</strong></span>` : ''}
+    ${state.includeLynch && res.lynchValue > 0 ? `<span class="chip">Lynch: <strong>${fmtRp(res.lynchValue)}</strong></span>` : ''}
     <span class="chip chip-strong">Final: <strong>${fmtRp(res.fvFinal)}</strong></span>
   `;
 
@@ -667,6 +712,16 @@ function renderOverviewOut(res) {
     res.ddmValue > 0
       ? `<p>&bull; Valuasi Dividen (<strong>2-Stage DDM</strong>): <strong>${fmtRp(res.ddmValue)}</strong> dari DPS <strong>${fmtRp(res.dps)}</strong> (Yield <strong>${fmtPct(res.divYield, 1)}</strong>, Payout <strong>${fmtPct(res.payoutRatio, 0)}</strong>).</p>`
       : '';
+  const lynchWarn =
+    res.lynchCategory.key === 'cyclical'
+      ? ' <em>(Waspada: laba/margin fluktuatif atau siklikal, jangan andalkan PEG di puncak siklus)</em>'
+      : Number(state.der) > 1.0
+      ? ' <em>(Catatan: DER &gt; 1.0x, cek keamanan utang)</em>'
+      : '';
+  const lynchLine =
+    res.lynchValue > 0
+      ? `<p>&bull; Valuasi Growth (<strong>Peter Lynch</strong>): <strong>${fmtRp(res.lynchValue)}</strong> (PEGY <strong>${res.pegy.toFixed(2)}x</strong>, kategori <strong>${res.lynchCategory.label}</strong>).${lynchWarn}</p>`
+      : '';
   const grahamLine =
     res.grahamNumber > 0
       ? `<p>&bull; Pembanding <strong>Graham Number</strong>: <strong>${fmtRp(res.grahamNumber)}</strong> (batas aman konservatif ala Benjamin Graham: √(22,5 &times; EPS &times; BVPS)).</p>`
@@ -677,6 +732,7 @@ function renderOverviewOut(res) {
     <p>&bull; Faktor paling berisiko (menaikkan discount rate): <strong>${riskiest.label}</strong> (${riskiest.fmt(riskiest.val)} &rarr; Beta <strong>${riskiest.beta.toFixed(2)}</strong>).</p>
     <p>&bull; EPS Dasar <strong>${fmtRp(res.epsBase)}</strong> diproyeksikan tumbuh <strong>${(state.g1 * 100).toFixed(1)}%</strong> (0–10 thn) dan <strong>${(state.g2 * 100).toFixed(1)}%</strong> (&gt;10 thn).</p>
     ${ddmLine}
+    ${lynchLine}
     ${grahamLine}
   `;
 }
@@ -1188,6 +1244,10 @@ document.getElementById('inpDdmG1').addEventListener('input', (e) => {
 document.getElementById('inpDdmG2').addEventListener('input', (e) => {
   const raw = e.target.value.trim();
   state.ddmG2 = raw === '' ? null : (parseFloat(raw) || 0) / 100;
+  renderAll();
+});
+document.getElementById('chkIncludeLynch').addEventListener('change', (e) => {
+  state.includeLynch = e.target.checked;
   renderAll();
 });
 document.getElementById('rngOptimism').addEventListener('input', (e) => {

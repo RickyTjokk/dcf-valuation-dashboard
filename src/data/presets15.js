@@ -41,6 +41,7 @@ export const PRESETS = [
     includeRel: true,
     dps: 319,
     includeDdm: false,
+    includeLynch: false,
   },
   {
     id: 'BBCA',
@@ -84,6 +85,7 @@ export const PRESETS = [
     includeRel: true,
     dps: 270,
     includeDdm: false,
+    includeLynch: false,
   },
   {
     id: 'CMRY',
@@ -125,6 +127,7 @@ export const PRESETS = [
     includeRel: true,
     dps: 90,
     includeDdm: false,
+    includeLynch: false,
   },
   {
     id: 'KLBF',
@@ -166,6 +169,7 @@ export const PRESETS = [
     includeRel: true,
     dps: 31,
     includeDdm: false,
+    includeLynch: false,
   },
   {
     id: 'CNMA',
@@ -207,6 +211,7 @@ export const PRESETS = [
     includeRel: true,
     dps: 8,
     includeDdm: false,
+    includeLynch: false,
   },
   {
     id: 'BBNI',
@@ -251,6 +256,7 @@ export const PRESETS = [
     includeRel: true,
     dps: 280,
     includeDdm: false,
+    includeLynch: false,
   },
   {
     id: 'BRIS',
@@ -292,6 +298,7 @@ export const PRESETS = [
     includeRel: false,
     dps: 18,
     includeDdm: false,
+    includeLynch: false,
   },
   {
     id: 'ICBP',
@@ -337,6 +344,7 @@ export const PRESETS = [
     includeRel: true,
     dps: 200,
     includeDdm: false,
+    includeLynch: false,
   },
   {
     id: 'TLKM',
@@ -381,6 +389,7 @@ export const PRESETS = [
     includeRel: true,
     dps: 178,
     includeDdm: false,
+    includeLynch: false,
   },
   {
     id: 'SIDO',
@@ -424,6 +433,7 @@ export const PRESETS = [
     includeRel: true,
     dps: 30,
     includeDdm: false,
+    includeLynch: false,
   },
   {
     id: 'ASII',
@@ -468,6 +478,7 @@ export const PRESETS = [
     includeRel: true,
     dps: 421,
     includeDdm: false,
+    includeLynch: false,
   },
   {
     id: 'UNVR',
@@ -512,6 +523,7 @@ export const PRESETS = [
     includeRel: true,
     dps: 140,
     includeDdm: false,
+    includeLynch: false,
   },
   {
     id: 'MYOR',
@@ -555,6 +567,7 @@ export const PRESETS = [
     includeRel: true,
     dps: 55,
     includeDdm: false,
+    includeLynch: false,
   },
   {
     id: 'ADRO',
@@ -599,6 +612,7 @@ export const PRESETS = [
     includeRel: true,
     dps: 250,
     includeDdm: false,
+    includeLynch: false,
   },
   {
     id: 'PTBA',
@@ -643,5 +657,6 @@ export const PRESETS = [
     includeRel: true,
     dps: 397,
     includeDdm: false,
+    includeLynch: false,
   },
 ];
