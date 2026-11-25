@@ -1,11 +1,13 @@
-import { BETA_SCALE, DEFAULT_INF, computeDCF } from '../engine/dcfEngine.js';
+import { BETA_SCALE, DEFAULT_INF, computeDCF, getStatBadge } from '../engine/dcfEngine.js';
 import { PRESETS } from '../data/presets15.js';
 import { fetchLiveQuote, loadLiveSettings, saveLiveSettings } from '../services/marketApi.js';
 import { smartExtractFinancials, loadLocalGeminiKey, saveLocalGeminiKey } from '../services/smartParser.js';
-import { renderPriceGauge, renderBetaChart, renderDcfChart } from './charts.js';
+import { explainValuationAI } from '../services/aiAdvisor.js';
+import { renderPriceGauge, renderBetaChart, renderDcfChart, renderHistoryChart } from './charts.js';
 
 const STORAGE_KEY = 'dcf_lab_watchlist_v2';
 const THEME_KEY = 'dcf_lab_theme_v2';
+const MODE_KEY = 'dcf_lab_ui_mode_v3';
 const clone = (o) => JSON.parse(JSON.stringify(o));
 
 const fmtRp = (v) => (isFinite(v) ? 'Rp ' + Math.round(v).toLocaleString('id-ID') : '-');
@@ -35,13 +37,14 @@ function saveWatchlist(list) {
 let customStocks = loadWatchlist();
 let state = clone(PRESETS[0]);
 let liveMeta = { status: 'preset', label: 'Preset' }; // 'preset' | 'live' | 'manual' | 'loading' | 'offline'
-let activeStep = 'step1';
+let activeStep = 'step3';
 let activeOutTab = 'overview';
 let projZoom = 30;
 let customBuyMos = 0.35;
+let lastExplainTicker = '';
 
 // =========================================================================
-// THEME & TOAST
+// THEME, UI MODE (PEMULA/PRO) & TOAST
 // =========================================================================
 function applyTheme(theme) {
   document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -58,6 +61,26 @@ const savedTheme = (() => {
   }
 })();
 applyTheme(savedTheme);
+
+function applyUiMode(mode) {
+  const m = mode === 'pro' ? 'pro' : 'beginner';
+  document.body.classList.toggle('mode-beginner', m === 'beginner');
+  document.querySelectorAll('.mode-btn').forEach((b) => {
+    b.classList.toggle('active', b.dataset.mode === m);
+  });
+  try {
+    localStorage.setItem(MODE_KEY, m);
+  } catch {}
+}
+
+const savedMode = (() => {
+  try {
+    return localStorage.getItem(MODE_KEY) || 'beginner';
+  } catch {
+    return 'beginner';
+  }
+})();
+applyUiMode(savedMode);
 
 function showToast(msg) {
   const el = document.getElementById('toast');
@@ -300,11 +323,18 @@ function renderHistoryTable() {
           <td class="num"><input data-hidx="${idx}" data-field="sales" type="number" step="any" value="${row.sales}" style="width:92px;text-align:right" class="tabular-nums" /></td>
           <td class="num"><input data-hidx="${idx}" data-field="op" type="number" step="any" value="${row.op}" style="width:86px;text-align:right" class="tabular-nums" /></td>
           <td class="num"><input data-hidx="${idx}" data-field="ni" type="number" step="any" value="${row.ni}" style="width:86px;text-align:right" class="tabular-nums" /></td>
-          <td class="num"><input data-hidx="${idx}" data-field="inf" type="number" step="0.001" value="${Number(row.inf).toFixed(4)}" style="width:78px;text-align:right" class="tabular-nums" /></td>
+          <td class="num pro-only"><input data-hidx="${idx}" data-field="inf" type="number" step="0.001" value="${Number(row.inf).toFixed(4)}" style="width:78px;text-align:right" class="tabular-nums" /></td>
           <td class="num text-muted tabular-nums font-semibold">${opm.toFixed(1)}%</td>
         </tr>`;
     })
     .join('');
+}
+
+function setMiniBadge(id, badge) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = badge.text;
+  el.className = `mini-badge ${badge.tone}`;
 }
 
 // =========================================================================
@@ -323,13 +353,39 @@ function renderAll() {
   document.getElementById('metaEpsBase').textContent = fmtRp(res.epsBase);
   document.getElementById('dispEpsAdj').textContent = fmtRp(res.epsAdj);
 
-  // Historical stats
+  // Stale Data Warning Banner
+  const staleEl = document.getElementById('staleBanner');
+  if (res.isStaleData) {
+    staleEl.classList.remove('hidden');
+    document.getElementById('staleBannerText').textContent =
+      `Perhatian: Data laporan keuangan ${state.ticker} masih sampai tahun ${res.dataYear}. Perbarui agar valuasi akurat.`;
+  } else {
+    staleEl.classList.add('hidden');
+  }
+
+  // Historical stats + friendly badges
   document.getElementById('statNiAvg').textContent = fmtNum(res.avgNiAdj, 0) + ' M';
   document.getElementById('statR').textContent = res.predictR.toFixed(3);
   document.getElementById('statCov').textContent = fmtPct(res.covOpm, 2);
   document.getElementById('statAvgOpm').textContent = fmtPct(res.avgOpm, 1);
   document.getElementById('statStdOpm').textContent = fmtPct(res.stdOpm, 2);
   document.getElementById('statCagr').textContent = res.cagr !== null ? fmtPct(res.cagr, 1) : '-';
+
+  setMiniBadge('badgeR', getStatBadge('r', res.predictR));
+  setMiniBadge('badgeCov', getStatBadge('cov', res.covOpm));
+  setMiniBadge('badgeCagr', getStatBadge('cagr', res.cagr));
+  setMiniBadge('badgeRoe', getStatBadge('roe', state.roe));
+  setMiniBadge('badgeDer', getStatBadge('der', state.der));
+  setMiniBadge('badgeNpm', getStatBadge('npm', state.npm));
+
+  // Patokan CAGR di Step 2
+  const cagrPct = res.cagr !== null ? (res.cagr * 100).toFixed(1) + '%' : 'N/A';
+  const recCons = res.cagr !== null ? Math.max(3, Math.min(10, Math.round(res.cagr * 50))) : 5;
+  document.getElementById('cagrGuideText').innerHTML =
+    `CAGR laba historis: <strong>${cagrPct}</strong> &mdash; patokan aman value investor biasanya sekitar <strong>${recCons}%–12%</strong>.`;
+
+  // History Chart in Step 1
+  renderHistoryChart(document.getElementById('step1HistoryChart'), { history: state.history });
 
   // Relative sub-lists
   document.getElementById('relPeList').innerHTML = res.peItems
@@ -339,7 +395,22 @@ function renderAll() {
     .map((x) => `<div><span>${x.label}</span><span>${x.val > 0 ? fmtRp(x.val) : '-'}</span></div>`)
     .join('');
 
-  // HERO VALUATION VERDICT
+  // HERO VALUATION VERDICT (2-SIDED: QUALITY GRADE + VALUATION)
+  const gradeEl = document.getElementById('kpiGradeBadge');
+  gradeEl.textContent = res.qualityGrade;
+  if (res.qualityGrade === 'A' || res.qualityGrade === 'B') {
+    gradeEl.style.background = 'var(--emerald-soft)';
+    gradeEl.style.color = 'var(--emerald)';
+  } else if (res.qualityGrade === 'C') {
+    gradeEl.style.background = 'var(--amber-soft)';
+    gradeEl.style.color = 'var(--amber)';
+  } else {
+    gradeEl.style.background = 'var(--rose-soft)';
+    gradeEl.style.color = 'var(--rose)';
+  }
+  document.getElementById('kpiQualityScore').textContent = `${res.qualityScore} / 100`;
+  document.getElementById('kpiQualityLabel').textContent = res.qualityLabel;
+
   document.getElementById('heroMethodHint').textContent = state.includeRel ? 'DCF + Relative' : 'Intrinsic Only';
   document.getElementById('kpiFV').textContent = fmtRp(res.fvFinal);
   document.getElementById('kpiFVSub').textContent = state.includeRel
@@ -373,7 +444,6 @@ function renderAll() {
   upEl.textContent = upside >= 0 ? `+${upside.toFixed(1)}% Upside` : `${upside.toFixed(1)}% Premium`;
   upEl.style.color = upside >= 30 ? 'var(--emerald)' : upside >= 0 ? 'var(--amber)' : 'var(--rose)';
 
-  // Mini gauge in Hero
   const fv = Math.max(1, res.fvFinal);
   const ratio = Math.min(100, Math.max(4, (p / (fv * 1.2)) * 100));
   const fvMark = Math.min(95, Math.max(10, (fv / (fv * 1.2)) * 100));
@@ -392,6 +462,32 @@ function renderAll() {
     .map((m) => `<span class="buy-pill">MoS ${(m * 100).toFixed(0)}%: ${fmtRp(fv * (1 - m))}</span>`)
     .join('');
 
+  // Anti-Value-Trap Verdict Strip
+  const vStrip = document.getElementById('heroVerdictStrip');
+  const vBg =
+    res.verdict.tone === 'emerald'
+      ? 'var(--emerald-soft)'
+      : res.verdict.tone === 'amber'
+      ? 'var(--amber-soft)'
+      : 'var(--rose-soft)';
+  const vCol =
+    res.verdict.tone === 'emerald'
+      ? 'var(--emerald)'
+      : res.verdict.tone === 'amber'
+      ? 'var(--amber)'
+      : 'var(--rose)';
+  vStrip.style.background = vBg;
+  vStrip.style.borderColor = vCol;
+  const vTitleEl = document.getElementById('heroVerdictTitle');
+  vTitleEl.textContent = res.verdict.title;
+  vTitleEl.style.color = vCol;
+  document.getElementById('heroVerdictDesc').textContent = res.verdict.desc;
+
+  // Hide old AI explanation when switching ticker
+  if (lastExplainTicker !== state.ticker) {
+    document.getElementById('aiExplainBox').classList.add('hidden');
+  }
+
   // Render Step 3 & Watchlist details
   renderOverviewOut(res);
   renderBetaOut(res);
@@ -401,6 +497,29 @@ function renderAll() {
 }
 
 function renderOverviewOut(res) {
+  // 3 Scenarios (Pesimis / Wajar / Optimis)
+  if (res.scenarios) {
+    const list = [
+      { key: 'bear', data: res.scenarios.bear, active: false },
+      { key: 'base', data: res.scenarios.base, active: true },
+      { key: 'bull', data: res.scenarios.bull, active: false },
+    ];
+    document.getElementById('scenarioCards').innerHTML = list
+      .map(({ data, active }) => {
+        const mCol = data.mos >= 0.3 ? 'var(--emerald)' : data.mos >= 0 ? 'var(--amber)' : 'var(--rose)';
+        return `
+          <div class="scenario-card ${active ? 'active-scenario' : ''}">
+            <div class="label-row">
+              <span class="stat-label">${data.label}</span>
+              <span class="mini-badge ${data.mos >= 0.3 ? 'emerald' : data.mos >= 0 ? 'amber' : 'rose'}">MoS ${(data.mos * 100).toFixed(1)}%</span>
+            </div>
+            <div class="scenario-val tabular-nums" style="color:${active ? 'var(--text)' : mCol}">${fmtRp(data.fv)}</div>
+            <div class="stat-note tabular-nums">Growth ${(data.g1 * 100).toFixed(1)}% &middot; Discount Rate ${(data.dr * 100).toFixed(2)}%</div>
+          </div>`;
+      })
+      .join('');
+  }
+
   document.getElementById('overviewKpiChips').innerHTML = `
     <span class="chip">Intrinsic: <strong>${fmtRp(res.iv)}</strong></span>
     <span class="chip">Relative: <strong>${state.includeRel ? fmtRp(res.rv) : 'Off'}</strong></span>
@@ -411,6 +530,8 @@ function renderOverviewOut(res) {
     price: state.price,
     fvFinal: res.fvFinal,
   });
+
+  renderHistoryChart(document.getElementById('step3HistoryChart'), { history: state.history });
 
   const fv = res.fvFinal;
   const p = Number(state.price) || 0;
@@ -456,8 +577,8 @@ function renderOverviewOut(res) {
   const strongest = sorted[0];
   const riskiest = sorted[sorted.length - 1];
   document.getElementById('diagnosticContent').innerHTML = `
-    <p><strong>${state.ticker}</strong> menghasilkan <strong>Beta Final ${res.betaFinal.toFixed(2)}</strong> &rarr; <strong>Discount Rate ${(res.dr * 100).toFixed(2)}%</strong>.</p>
-    <p>&bull; Faktor paling sehat (menekan risiko): <strong>${strongest.label}</strong> (${strongest.fmt(strongest.val)} &rarr; Beta <strong>${strongest.beta.toFixed(2)}</strong>).</p>
+    <p><strong>${state.ticker}</strong> mendapat <strong>Kualitas Grade ${res.qualityGrade} (${res.qualityScore}/100)</strong> dengan <strong>Discount Rate ${(res.dr * 100).toFixed(2)}%</strong>.</p>
+    <p>&bull; Faktor terkuat (menekan risiko): <strong>${strongest.label}</strong> (${strongest.fmt(strongest.val)} &rarr; Beta <strong>${strongest.beta.toFixed(2)}</strong>).</p>
     <p>&bull; Faktor paling berisiko (menaikkan discount rate): <strong>${riskiest.label}</strong> (${riskiest.fmt(riskiest.val)} &rarr; Beta <strong>${riskiest.beta.toFixed(2)}</strong>).</p>
     <p>&bull; EPS Dasar <strong>${fmtRp(res.epsBase)}</strong> diproyeksikan tumbuh <strong>${(state.g1 * 100).toFixed(1)}%</strong> (0–10 thn) dan <strong>${(state.g2 * 100).toFixed(1)}%</strong> (&gt;10 thn).</p>
   `;
@@ -575,6 +696,7 @@ function renderWatchlistOut() {
   const sortBy = document.getElementById('selSortWatchlist').value;
   combined.sort((a, b) => {
     if (sortBy === 'mosDesc') return b.r.mos - a.r.mos;
+    if (sortBy === 'qualityDesc') return b.r.qualityScore - a.r.qualityScore;
     if (sortBy === 'drAsc') return a.r.dr - b.r.dr;
     return a.item.ticker.localeCompare(b.item.ticker);
   });
@@ -582,6 +704,7 @@ function renderWatchlistOut() {
   document.getElementById('watchlistTbody').innerHTML = combined
     .map(({ item, r }) => {
       const mosColor = r.mos >= 0.3 ? 'var(--emerald)' : r.mos >= 0 ? 'var(--amber)' : 'var(--rose)';
+      const gTone = r.qualityGrade === 'A' || r.qualityGrade === 'B' ? 'emerald' : r.qualityGrade === 'C' ? 'amber' : 'rose';
       const isCur = item.id === state.id;
       return `
         <tr style="cursor:pointer;${isCur ? 'background:var(--surface-subtle);font-weight:700' : ''}" data-loadid="${item.id}" data-iscustom="${item.isCustom}">
@@ -590,8 +713,9 @@ function renderWatchlistOut() {
             ${item.isCustom ? '<span class="hint-chip">Saya</span>' : ''}
             <div class="text-xs text-muted">${item.name}</div>
           </td>
+          <td class="center"><span class="mini-badge ${gTone}">Grade ${r.qualityGrade} (${r.qualityScore})</span></td>
+          <td class="center"><span class="mini-badge ${r.isStaleData ? 'amber' : 'muted'}">LK ${r.dataYear || '-'}</span></td>
           <td class="num tabular-nums">${fmtRp(item.price)}</td>
-          <td class="num tabular-nums">${r.betaFinal.toFixed(2)}</td>
           <td class="num tabular-nums">${(r.dr * 100).toFixed(1)}%</td>
           <td class="num tabular-nums">${fmtRp(r.iv)}</td>
           <td class="num tabular-nums">${fmtRp(r.fvFinal)}</td>
@@ -630,6 +754,12 @@ function setOutTab(tab) {
 document.querySelectorAll('.step-btn').forEach((b) => b.addEventListener('click', () => setStep(b.dataset.step)));
 document.querySelectorAll('.next-step-btn').forEach((b) => b.addEventListener('click', () => setStep(b.dataset.goto)));
 document.querySelectorAll('.out-tab').forEach((b) => b.addEventListener('click', () => setOutTab(b.dataset.outtab)));
+document.querySelectorAll('.mode-btn').forEach((b) =>
+  b.addEventListener('click', () => {
+    applyUiMode(b.dataset.mode);
+    showToast(b.dataset.mode === 'pro' ? 'Mode Pro aktif (semua kontrol tampil)' : 'Mode Pemula aktif (tampilan ringkas)');
+  })
+);
 
 // Theme Toggle
 document.getElementById('btnTheme').addEventListener('click', () => {
@@ -677,6 +807,7 @@ document.getElementById('pickerList').addEventListener('click', async (e) => {
     liveMeta = { status: 'preset', label: isCust ? 'Watchlist' : 'Preset' };
     syncInputsFromState();
     renderAll();
+    setStep('step3');
     if (loadLiveSettings().autoSyncOnSelect) {
       syncLiveTicker(false);
     }
@@ -1203,8 +1334,77 @@ document.getElementById('btnSaveLiveSettings').addEventListener('click', () => {
   showToast('Pengaturan Live Data & AI disimpan');
 });
 
-// Init
+// V3: Stale Data Update Button
+document.getElementById('btnUpdateStaleAi').addEventListener('click', () => openAiModal('ai'));
+
+// V3: Quick Growth Preset Buttons (Konservatif / Moderat / Optimis)
+document.querySelectorAll('.gpreset-btn').forEach((btn) =>
+  btn.addEventListener('click', () => {
+    const res = computeDCF(state);
+    const cagr = res.cagr !== null && res.cagr > 0 ? res.cagr : 0.08;
+    const kind = btn.dataset.gpreset;
+    document.querySelectorAll('.gpreset-btn').forEach((b) => b.classList.toggle('active', b === btn));
+
+    if (kind === 'conservative') {
+      state.g1 = Number(Math.max(0.03, Math.min(0.08, cagr * 0.5)).toFixed(3));
+      state.g2 = 0.02;
+      state.optimism = 0.3;
+    } else if (kind === 'moderate') {
+      state.g1 = Number(Math.max(0.05, Math.min(0.12, cagr * 0.75)).toFixed(3));
+      state.g2 = 0.02;
+      state.optimism = 0.5;
+    } else {
+      state.g1 = Number(Math.max(0.08, Math.min(0.18, cagr * 1.0)).toFixed(3));
+      state.g2 = 0.03;
+      state.optimism = 0.7;
+    }
+    syncInputsFromState();
+    renderAll();
+    showToast(`Skenario ${btn.textContent} diterapkan (Growth ${(state.g1 * 100).toFixed(1)}%)`);
+  })
+);
+
+// V3: AI Jelaskan Valuasi Ini (Gemini 3.1 Flash-Lite + Local Coach Fallback)
+document.getElementById('btnExplainAi').addEventListener('click', async () => {
+  const btn = document.getElementById('btnExplainAi');
+  const box = document.getElementById('aiExplainBox');
+  btn.disabled = true;
+  btn.textContent = 'Menganalisa...';
+
+  try {
+    const res = computeDCF(state);
+    const out = await explainValuationAI(state, res);
+    lastExplainTicker = state.ticker;
+    box.classList.remove('hidden');
+    box.innerHTML = `
+      <div class="ai-explain-item">
+        <h4>1. Kesimpulan Cepat (${out.model})</h4>
+        <p>${out.data.summary}</p>
+      </div>
+      <div class="ai-explain-item">
+        <h4>2. Kekuatan Bisnis</h4>
+        <p>${out.data.strengths}</p>
+      </div>
+      <div class="ai-explain-item">
+        <h4>3. Risiko yang Perlu Dicek</h4>
+        <p>${out.data.risks}</p>
+      </div>
+      <div class="ai-explain-item">
+        <h4>4. Langkah Selanjutnya</h4>
+        <p>${out.data.nextSteps}</p>
+      </div>
+    `;
+  } catch (err) {
+    showToast(err.message || 'Gagal membuat penjelasan');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '&#10024; Jelaskan Valuasi Ini';
+  }
+});
+
+// Init — Smart Landing opens on Step 3 (Ringkasan & Analisa) for preset
 syncInputsFromState();
-setStep('step1');
+setStep('step3');
 setOutTab('overview');
 renderAll();
+

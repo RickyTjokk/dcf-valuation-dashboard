@@ -90,22 +90,46 @@
         </button>
       </div>
       <div class="stepper-utils">
+        <div class="seg-group" title="Mode Pemula menyembunyikan parameter teknis lanjutan">
+          <button type="button" data-mode="beginner" class="mode-btn active">Pemula</button>
+          <button type="button" data-mode="pro" class="mode-btn">Pro</button>
+        </div>
         <button id="btnPasteModal" type="button" class="btn btn-ai">&#10024; AI Smart Input</button>
         <button id="btnReset" type="button" class="btn btn-ghost">Reset</button>
       </div>
     </nav>
 
+    <!-- STALE DATA WARNING BANNER -->
+    <div id="staleBanner" class="stale-banner hidden">
+      <div class="stale-left">
+        <span class="stale-icon">&#9888;</span>
+        <span id="staleBannerText">Data laporan keuangan terakhir masih tahun lama.</span>
+      </div>
+      <button id="btnUpdateStaleAi" type="button" class="btn btn-ai btn-sm">&#10024; Update Data via AI</button>
+    </div>
+
     <!-- HERO VALUATION VERDICT BANNER (ALWAYS VISIBLE) -->
     <section class="hero-card" aria-label="Ringkasan Valuasi Utama">
-      <div class="hero-grid">
+      <div class="hero-grid hero-grid-v3">
+        <div class="hero-col-quality">
+          <div class="eyebrow">Kualitas Bisnis</div>
+          <div class="mos-row">
+            <span id="kpiGradeBadge" class="grade-pill">A</span>
+            <div>
+              <div id="kpiQualityScore" class="quality-score tabular-nums">80 / 100</div>
+              <div id="kpiQualityLabel" class="hero-sub">Bisnis Sangat Kuat</div>
+            </div>
+          </div>
+        </div>
+
         <div class="hero-col-main">
-          <div class="eyebrow">Final Valuation <span id="heroMethodHint" class="hint-chip">DCF + Relative</span></div>
+          <div class="eyebrow">Harga Wajar (Final) <span id="heroMethodHint" class="hint-chip">DCF + Relative</span></div>
           <div id="kpiFV" class="hero-value tabular-nums">Rp 5.049</div>
           <div id="kpiFVSub" class="hero-sub tabular-nums">Intrinsic: Rp 5.518 &middot; Relative: Rp 4.580</div>
         </div>
 
         <div class="hero-col-mos">
-          <div class="eyebrow">Margin of Safety</div>
+          <div class="eyebrow">Margin of Safety (Diskon)</div>
           <div class="mos-row">
             <span id="kpiMoS" class="mos-value tabular-nums">38.6%</span>
             <span id="kpiStatusPill" class="status-badge">UNDERVALUED</span>
@@ -119,12 +143,14 @@
             <span id="upsideLabel" class="upside-text tabular-nums">+62.9% Upside</span>
           </div>
           <div id="heroGaugeBar" class="mini-gauge-wrap"></div>
+          <div id="heroBuyPills" class="buy-pills tabular-nums mt-2"></div>
         </div>
+      </div>
 
-        <div class="hero-col-pills">
-          <div class="eyebrow">Target Beli (Zona MoS)</div>
-          <div id="heroBuyPills" class="buy-pills tabular-nums"></div>
-        </div>
+      <!-- Anti-Value-Trap Human Verdict Strip -->
+      <div id="heroVerdictStrip" class="verdict-strip mt-3">
+        <strong id="heroVerdictTitle">-</strong>
+        <span id="heroVerdictDesc" class="text-muted">-</span>
       </div>
     </section>
 
@@ -194,7 +220,7 @@
                     <th class="num">Penjualan</th>
                     <th class="num">Laba Usaha</th>
                     <th class="num">Laba Bersih</th>
-                    <th class="num">Faktor Inflasi</th>
+                    <th class="num pro-only">Faktor Inflasi</th>
                     <th class="num">OPM</th>
                   </tr>
                 </thead>
@@ -202,7 +228,7 @@
               </table>
             </div>
 
-            <div class="table-footer-bar">
+            <div class="table-footer-bar pro-only">
               <span>Cakupan rata-rata Laba &amp; OPM:</span>
               <select id="selAvgYears">
                 <option value="all">Semua tahun di tabel</option>
@@ -218,42 +244,62 @@
             <div class="card-header">
               <div>
                 <h2 class="card-title">Ringkasan Statistik Otomatis</h2>
-                <p class="card-desc">Dihitung otomatis dari data historis untuk menentukan normalisasi EPS dan risiko Beta.</p>
+                <p class="card-desc">Arti sederhana dari angka laporan keuangan di samping.</p>
               </div>
             </div>
             <div class="stat-cards-grid">
               <div class="stat-box">
-                <div class="stat-label">Laba Bersih Avg (Cyclically Adj.)</div>
+                <div class="stat-label">Laba Bersih Rata-Rata</div>
                 <div id="statNiAvg" class="stat-val tabular-nums">-</div>
-                <div class="stat-note">Rata-rata laba setelah penyesuaian inflasi</div>
+                <div class="stat-note">Rata-rata laba disesuaikan inflasi</div>
               </div>
               <div class="stat-box">
-                <div class="stat-label">Predictability Laba (R)</div>
+                <div class="label-row">
+                  <span class="stat-label">Konsistensi Laba (R)</span>
+                  <span id="badgeR" class="mini-badge">-</span>
+                </div>
                 <div id="statR" class="stat-val tabular-nums">-</div>
-                <div class="stat-note">Korelasi pertumbuhan laba (1.0 = sangat konsisten)</div>
+                <div class="stat-note">Mendekati 1.0 = laba naik stabil tiap tahun</div>
               </div>
               <div class="stat-box">
-                <div class="stat-label">Stabilitas Margin (COV OPM)</div>
+                <div class="label-row">
+                  <span class="stat-label">Stabilitas Margin (COV)</span>
+                  <span id="badgeCov" class="mini-badge">-</span>
+                </div>
                 <div id="statCov" class="stat-val tabular-nums">-</div>
-                <div class="stat-note">Std OPM / Avg OPM (semakin kecil semakin stabil)</div>
+                <div class="stat-note">Semakin kecil % = profitabilitas semakin tahan banting</div>
               </div>
               <div class="stat-box">
                 <div class="stat-label">Rata-rata OPM</div>
                 <div id="statAvgOpm" class="stat-val tabular-nums">-</div>
-                <div class="stat-note">Efisiensi laba operasional rata-rata</div>
+                <div class="stat-note">Margin keuntungan dari bisnis inti</div>
               </div>
-              <div class="stat-box">
+              <div class="stat-box pro-only">
                 <div class="stat-label">Standar Deviasi OPM</div>
                 <div id="statStdOpm" class="stat-val tabular-nums">-</div>
                 <div class="stat-note">Volatilitas margin operasional antar tahun</div>
               </div>
               <div class="stat-box">
-                <div class="stat-label">CAGR Laba Bersih</div>
+                <div class="label-row">
+                  <span class="stat-label">Pertumbuhan (CAGR)</span>
+                  <span id="badgeCagr" class="mini-badge">-</span>
+                </div>
                 <div id="statCagr" class="stat-val tabular-nums">-</div>
-                <div class="stat-note">Laju pertumbuhan tahunan historis</div>
+                <div class="stat-note">Rata-rata pertumbuhan laba bersih per tahun</div>
               </div>
             </div>
           </div>
+        </div>
+
+        <!-- Historical Trend Chart in Step 1 -->
+        <div class="card mt-4">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">Grafik Tren Kinerja Historis (Penjualan vs Laba)</h2>
+              <p class="card-desc">Arahkan kursor ke batang grafik untuk melihat margin laba tiap tahun (dari tahun terlama ke terbaru).</p>
+            </div>
+          </div>
+          <div id="step1HistoryChart" class="chart-wrap"></div>
         </div>
       </section>
 
@@ -265,23 +311,32 @@
             <div class="card-header">
               <div>
                 <h2 class="card-title">Rasio Fundamental &amp; EPS</h2>
-                <p class="card-desc">Digunakan untuk menghitung Beta Fundamental dan basis laba per saham.</p>
+                <p class="card-desc">Menentukan kualitas kesehatan perusahaan dan laba per lembar saham.</p>
               </div>
             </div>
             <div class="form-stack">
               <div class="two-fields">
                 <div class="field">
-                  <label for="inpRoe">ROE (%) <span class="tip" title="Return on Equity: >25% mendapat Beta terbaik (0.33)">?</span></label>
+                  <div class="label-row">
+                    <label for="inpRoe">ROE (%) <span class="tip" title="Return on Equity: >25% mendapat Beta terbaik (0.33)">?</span></label>
+                    <span id="badgeRoe" class="mini-badge">-</span>
+                  </div>
                   <input id="inpRoe" type="number" step="0.01" class="tabular-nums" />
                 </div>
                 <div class="field">
-                  <label for="inpDer">DER (x) <span class="tip" title="Debt to Equity Ratio: <0.10x mendapat Beta terbaik (0.33)">?</span></label>
+                  <div class="label-row">
+                    <label for="inpDer">DER (x) <span class="tip" title="Debt to Equity Ratio: <0.10x mendapat Beta terbaik (0.33)">?</span></label>
+                    <span id="badgeDer" class="mini-badge">-</span>
+                  </div>
                   <input id="inpDer" type="number" step="0.01" min="0" class="tabular-nums" />
                 </div>
               </div>
               <div class="two-fields">
                 <div class="field">
-                  <label for="inpNpm">NPM (%) <span class="tip" title="Net Profit Margin: >25% mendapat Beta terbaik (0.33)">?</span></label>
+                  <div class="label-row">
+                    <label for="inpNpm">NPM (%) <span class="tip" title="Net Profit Margin: >25% mendapat Beta terbaik (0.33)">?</span></label>
+                    <span id="badgeNpm" class="mini-badge">-</span>
+                  </div>
                   <input id="inpNpm" type="number" step="0.01" class="tabular-nums" />
                 </div>
                 <div class="field">
@@ -295,16 +350,16 @@
                   <input id="inpEpsTtm" type="number" step="0.01" class="tabular-nums" />
                 </div>
                 <div class="stat-box compact">
-                  <div class="stat-label">EPS Cyclically Adj.</div>
+                  <div class="stat-label">EPS Rata-Rata (Adj.)</div>
                   <div id="dispEpsAdj" class="stat-val tabular-nums">-</div>
                 </div>
               </div>
               <div class="field">
-                <label for="selEpsBasis">Basis Cash Flow / EPS Awal (C27)</label>
+                <label for="selEpsBasis">Basis Laba Awal Proyeksi (C27)</label>
                 <select id="selEpsBasis">
-                  <option value="avg">Rata-rata (EPS Cyclically Adj. + EPS TTM)</option>
-                  <option value="ttm">EPS TTM Saja</option>
-                  <option value="adj">EPS Cyclically Adj. Saja</option>
+                  <option value="avg">Rata-rata (EPS Rata-Rata + EPS TTM)</option>
+                  <option value="ttm">EPS TTM Saja (Laba 12 bulan terakhir)</option>
+                  <option value="adj">EPS Rata-Rata Historis Saja</option>
                 </select>
               </div>
               <div class="stat-box compact highlight">
@@ -320,11 +375,21 @@
           <div class="card">
             <div class="card-header">
               <div>
-                <h2 class="card-title">Asumsi Pertumbuhan &amp; Discount</h2>
-                <p class="card-desc">Geser slider untuk melihat dampak langsung ke Intrinsic Value dan Margin of Safety.</p>
+                <h2 class="card-title">Asumsi Pertumbuhan &amp; Diskon</h2>
+                <p class="card-desc">Gunakan tombol skenario cepat atau geser slider secara manual.</p>
               </div>
             </div>
             <div class="form-stack">
+              <!-- Patokan CAGR + 3 Preset Asumsi Cepat -->
+              <div class="cagr-helper">
+                <div id="cagrGuideText" class="text-xs text-muted mb-2">Patokan CAGR historis: -</div>
+                <div class="seg-group full-width">
+                  <button type="button" data-gpreset="conservative" class="gpreset-btn">Konservatif</button>
+                  <button type="button" data-gpreset="moderate" class="gpreset-btn">Moderat</button>
+                  <button type="button" data-gpreset="optimistic" class="gpreset-btn">Optimis</button>
+                </div>
+              </div>
+
               <div class="slider-field">
                 <div class="label-row">
                   <label for="rngG1">Growth 0–10 Tahun (%)</label>
@@ -343,13 +408,13 @@
 
               <div class="slider-field">
                 <div class="label-row">
-                  <label for="rngBetaAdj">Beta Adjustment <span class="tip" title="Penyesuaian subjektif/kualitatif terhadap Beta rata-rata (mis. -0.2 untuk bluechip sangat defensif)">?</span></label>
+                  <label for="rngBetaAdj">Penyesuaian Risiko (Beta Adj.) <span class="tip" title="Penyesuaian kualitatif: negatif (-) berarti bisnis terasa lebih aman/defensif, positif (+) lebih berisiko">?</span></label>
                   <input id="inpBetaAdj" type="number" step="0.05" min="-1" max="1" class="inline-single tabular-nums" />
                 </div>
                 <input id="rngBetaAdj" type="range" min="-0.5" max="0.5" step="0.05" />
               </div>
 
-              <div class="two-fields">
+              <div class="two-fields pro-only">
                 <div class="field">
                   <label for="inpRf">10-Y Bond Rf (%)</label>
                   <input id="inpRf" type="number" step="0.1" class="tabular-nums" />
@@ -360,7 +425,7 @@
                 </div>
               </div>
 
-              <div class="field">
+              <div class="field pro-only">
                 <label for="selY1Mode">Pola Proyeksi Tahun Awal (Y1–Y3)</label>
                 <select id="selY1Mode">
                   <option value="normal">Normal — Tahun 1 langsung tumbuh (1+g)^1</option>
@@ -385,14 +450,14 @@
           <div class="card">
             <div class="card-header">
               <div>
-                <h2 class="card-title">Relative Valuation (PE &amp; PBV)</h2>
-                <p class="card-desc">Mengambil persentil dari valuasi historis PE dan PBV 3Y/5Y/10Y.</p>
+                <h2 class="card-title">Valuasi Banding Historis (PE &amp; PBV)</h2>
+                <p class="card-desc">Membandingkan harga dengan rata-rata PE dan PBV emiten 3–10 tahun terakhir.</p>
               </div>
             </div>
             <div class="form-stack">
               <label class="toggle-box">
                 <div>
-                  <div class="font-semibold">Gabungkan ke Final Valuation</div>
+                  <div class="font-semibold">Gabungkan ke Harga Wajar Final</div>
                   <div class="text-muted text-xs">Matikan jika ingin pakai DCF Intrinsic saja (misal saham IPO).</div>
                 </div>
                 <input id="chkIncludeRel" type="checkbox" />
@@ -400,13 +465,13 @@
 
               <div class="slider-field">
                 <div class="label-row">
-                  <label for="rngOptimism">Tingkat Optimisme (Percentile)</label>
+                  <label for="rngOptimism">Tingkat Optimisme Pasar</label>
                   <strong id="dispOptimism" class="tabular-nums">0.50 (50%)</strong>
                 </div>
                 <input id="rngOptimism" type="range" min="0" max="1" step="0.05" />
               </div>
 
-              <div class="field">
+              <div class="field pro-only">
                 <label for="selRelMode">Sumber Multiple</label>
                 <select id="selRelMode">
                   <option value="all">Semua (Mean PE + Mean PBV)</option>
@@ -455,6 +520,9 @@
 
         <!-- OUT 1: OVERVIEW -->
         <div id="panel-out-overview" class="out-panel">
+          <!-- 3 SCENARIOS: PESIMIS / WAJAR / OPTIMIS -->
+          <div class="three-col-grid mb-4" id="scenarioCards"></div>
+
           <div class="card mb-4">
             <div class="card-header">
               <div>
@@ -491,11 +559,26 @@
             </div>
           </div>
 
+          <div class="card mb-4">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">Tren Pendapatan &amp; Laba Historis</h3>
+                <p class="card-desc">Pastikan perusahaan tumbuh konsisten sebelum membeli meskipun harga terlihat diskon.</p>
+              </div>
+            </div>
+            <div id="step3HistoryChart" class="chart-wrap"></div>
+          </div>
+
           <div class="card">
             <div class="card-header">
-              <h3 class="card-title">Diagnosis Model Otomatis</h3>
+              <div>
+                <h3 class="card-title">Diagnosis &amp; Penjelasan Ramah Pemula</h3>
+                <p class="card-desc">Ringkasan poin terkuat, risiko terbesar, dan panduan langkah berikutnya.</p>
+              </div>
+              <button id="btnExplainAi" type="button" class="btn btn-ai btn-sm">&#10024; Jelaskan Valuasi Ini</button>
             </div>
             <div id="diagnosticContent" class="diag-list"></div>
+            <div id="aiExplainBox" class="ai-explain-box hidden mt-3"></div>
           </div>
         </div>
 
@@ -630,6 +713,7 @@
               <button id="btnRefreshAllWatchlist" type="button" class="btn btn-secondary">Refresh Semua Harga Live</button>
               <select id="selSortWatchlist">
                 <option value="mosDesc">Urutkan: MoS Tertinggi</option>
+                <option value="qualityDesc">Urutkan: Kualitas Terbaik</option>
                 <option value="drAsc">Urutkan: Discount Rate Terendah</option>
                 <option value="tickerAsc">Urutkan: Ticker A–Z</option>
               </select>
@@ -640,8 +724,9 @@
               <thead>
                 <tr>
                   <th>Ticker</th>
+                  <th class="center">Kualitas</th>
+                  <th class="center">Data LK</th>
                   <th class="num">Harga Pasar</th>
-                  <th class="num">Beta</th>
                   <th class="num">Discount Rate</th>
                   <th class="num">Intrinsic</th>
                   <th class="num">Final Valuation</th>

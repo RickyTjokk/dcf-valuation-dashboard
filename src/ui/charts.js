@@ -187,3 +187,92 @@ export function renderDcfChart(container, { rows, projZoom, fmtRp }) {
     tip.classList.add('hidden');
   });
 }
+
+export function renderHistoryChart(container, { history }) {
+  const rows = [...(history || [])].sort((a, b) => Number(a.year) - Number(b.year));
+  if (!rows.length) {
+    container.innerHTML = '<div class="text-xs text-muted">Belum ada data historis.</div>';
+    return;
+  }
+
+  const W = 640;
+  const H = 220;
+  const padL = 60;
+  const padR = 16;
+  const padT = 18;
+  const padB = 30;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+
+  const maxVal = Math.max(
+    ...rows.flatMap((r) => [Math.abs(r.sales || 0), Math.abs(r.op || 0), Math.abs(r.ni || 0)]),
+    1
+  );
+  const yZero = padT + plotH;
+  const yOf = (val) => padT + plotH - (Math.max(0, val) / maxVal) * plotH;
+
+  let grid = '';
+  for (let k = 0; k <= 4; k++) {
+    const v = (maxVal * k) / 4;
+    const y = yOf(v);
+    grid += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="var(--border)" stroke-dasharray="3,3" />`;
+    const lbl = v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}T` : `${Math.round(v)}M`;
+    grid += `<text x="${padL - 8}" y="${y + 4}" text-anchor="end" fill="var(--text-muted)" font-size="11">${lbl}</text>`;
+  }
+
+  const groupW = plotW / rows.length;
+  const barW = Math.min(20, Math.max(8, (groupW - 18) / 3));
+  let bars = '';
+
+  rows.forEach((r, idx) => {
+    const cx = padL + idx * groupW + groupW / 2;
+    const xSales = cx - barW * 1.55;
+    const xOp = cx - barW * 0.5;
+    const xNi = cx + barW * 0.55;
+
+    const hSales = Math.max(2, yZero - yOf(r.sales || 0));
+    const hOp = Math.max(2, yZero - yOf(r.op || 0));
+    const hNi = Math.max(2, yZero - yOf(r.ni || 0));
+
+    bars += `
+      <g class="hist-group" data-hidx="${idx}" style="cursor:pointer">
+        <rect x="${cx - groupW / 2}" y="${padT}" width="${groupW}" height="${plotH}" fill="transparent" />
+        <rect x="${xSales}" y="${yZero - hSales}" width="${barW}" height="${hSales}" rx="3" fill="var(--primary)" opacity="0.28" />
+        <rect x="${xOp}" y="${yZero - hOp}" width="${barW}" height="${hOp}" rx="3" fill="var(--amber)" opacity="0.78" />
+        <rect x="${xNi}" y="${yZero - hNi}" width="${barW}" height="${hNi}" rx="3" fill="${(r.ni || 0) >= 0 ? 'var(--emerald)' : 'var(--rose)'}" opacity="0.92" />
+        <text x="${cx}" y="${H - 8}" text-anchor="middle" fill="var(--text-muted)" font-size="11" font-weight="600">${r.year}</text>
+      </g>
+    `;
+  });
+
+  container.innerHTML = `
+    <div class="chart-legend">
+      <span><i class="legend-box" style="background:var(--primary);opacity:0.35"></i> Penjualan</span>
+      <span><i class="legend-box" style="background:var(--amber)"></i> Laba Usaha</span>
+      <span><i class="legend-box" style="background:var(--emerald)"></i> Laba Bersih</span>
+    </div>
+    <svg viewBox="0 0 ${W} ${H}" class="svg-chart" role="img" aria-label="Grafik Tren Kinerja Historis">
+      ${grid}
+      ${bars}
+    </svg>
+    <div class="chart-tooltip hidden hist-tip"></div>
+  `;
+
+  const tip = container.querySelector('.hist-tip');
+  container.querySelectorAll('.hist-group').forEach((g) => {
+    g.addEventListener('mouseenter', () => {
+      const r = rows[Number(g.dataset.hidx)];
+      const opm = r.sales > 0 ? ((r.op / r.sales) * 100).toFixed(1) : '0.0';
+      const npm = r.sales > 0 ? ((r.ni / r.sales) * 100).toFixed(1) : '0.0';
+      tip.classList.remove('hidden');
+      tip.innerHTML = `
+        <span><strong>Tahun ${r.year}</strong></span>
+        <span>Penjualan: <strong>${Math.round(r.sales).toLocaleString('id-ID')} M</strong></span>
+        <span>Laba Usaha: <strong>${Math.round(r.op).toLocaleString('id-ID')} M</strong> (OPM ${opm}%)</span>
+        <span>Laba Bersih: <strong>${Math.round(r.ni).toLocaleString('id-ID')} M</strong> (NPM ${npm}%)</span>
+      `;
+    });
+  });
+  container.addEventListener('mouseleave', () => tip.classList.add('hidden'));
+}
+

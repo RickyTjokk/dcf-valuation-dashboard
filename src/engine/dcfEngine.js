@@ -239,6 +239,81 @@ export function computeDCF(s, overrides = {}) {
   const mos = fvFinal > 0 ? 1 - price / fvFinal : 0;
   const impliedPe = epsBase > 0 ? iv / epsBase : 0;
 
+  // Beginner-Friendly Quality Score (0-100) & Grade A-D from 6-factor Fundamental BetaAvg
+  const qualityScore = Math.max(
+    0,
+    Math.min(100, Math.round(((2.0 - betaAvg) / (2.0 - 0.33)) * 100))
+  );
+  const qualityGrade =
+    qualityScore >= 75 ? 'A' : qualityScore >= 55 ? 'B' : qualityScore >= 35 ? 'C' : 'D';
+  const qualityLabel =
+    qualityGrade === 'A'
+      ? 'Bisnis Sangat Kuat'
+      : qualityGrade === 'B'
+      ? 'Bisnis Solid'
+      : qualityGrade === 'C'
+      ? 'Risiko Menengah'
+      : 'Risiko Tinggi';
+
+  // Anti-Value-Trap Verdict (combines Quality + Margin of Safety)
+  let verdict;
+  const isStrongBiz = qualityGrade === 'A' || qualityGrade === 'B';
+  if (isStrongBiz && mos >= 0.3) {
+    verdict = {
+      tone: 'emerald',
+      title: 'Peluang Menarik (Bisnis Solid + Harga Diskon)',
+      desc: `Kualitas bisnis Grade ${qualityGrade} (${qualityScore}/100) dengan Margin of Safety ${(mos * 100).toFixed(1)}%. Layak masuk daftar beli utama.`,
+    };
+  } else if (!isStrongBiz && mos >= 0.3) {
+    verdict = {
+      tone: 'amber',
+      title: 'Waspada Value Trap (Murah tapi Risiko Tinggi)',
+      desc: `Harga terlihat diskon (${(mos * 100).toFixed(1)}%), namun Kualitas Bisnis Grade ${qualityGrade} (${qualityScore}/100). Periksa penyebab laba/margin berfluktuasi sebelum membeli.`,
+    };
+  } else if (isStrongBiz && mos >= 0) {
+    verdict = {
+      tone: 'amber',
+      title: 'Bisnis Bagus, Harga Cukup Wajar',
+      desc: `Kualitas Grade ${qualityGrade} (${qualityScore}/100) sudah sehat, tetapi diskon saat ini (${(mos * 100).toFixed(1)}%) masih di bawah target MoS 30%. Tunggu koreksi atau cicil bertahap.`,
+    };
+  } else if (isStrongBiz && mos < 0) {
+    verdict = {
+      tone: 'rose',
+      title: 'Bisnis Bagus, Harga Masih Mahal',
+      desc: `Fundamental Grade ${qualityGrade} (${qualityScore}/100) kuat, tetapi harga pasar sudah di atas nilai wajar. Simpan di pantauan sambil tunggu harga diskon.`,
+    };
+  } else {
+    verdict = {
+      tone: 'rose',
+      title: 'Risiko Tinggi & Belum Menarik',
+      desc: `Kualitas Grade ${qualityGrade} (${qualityScore}/100) dengan MoS ${(mos * 100).toFixed(1)}%. Sebaiknya cari emiten dengan fundamental lebih stabil.`,
+    };
+  }
+
+  const dataYear = years.length ? Math.max(...years) : null;
+  const refYear = overrides.refYear || new Date().getFullYear();
+  const isStaleData = dataYear !== null && dataYear < refYear - 2;
+
+  let scenarios = null;
+  if (!overrides._skipScenarios) {
+    const baseG1 = Number(s.g1) || 0;
+    const bear = computeDCF(s, {
+      g1: Math.max(-0.05, baseG1 - 0.03),
+      dr: safeDr + 0.01,
+      _skipScenarios: true,
+    });
+    const bull = computeDCF(s, {
+      g1: Math.min(0.4, baseG1 + 0.03),
+      dr: Math.max(0.03, safeDr - 0.01),
+      _skipScenarios: true,
+    });
+    scenarios = {
+      bear: { label: 'Pesimis (Konservatif)', g1: Math.max(-0.05, baseG1 - 0.03), dr: safeDr + 0.01, fv: bear.fvFinal, iv: bear.iv, mos: bear.mos },
+      base: { label: 'Wajar (Asumsi Aktif)', g1: baseG1, dr: safeDr, fv: fvFinal, iv, mos },
+      bull: { label: 'Optimis', g1: Math.min(0.4, baseG1 + 0.03), dr: Math.max(0.03, safeDr - 0.01), fv: bull.fvFinal, iv: bull.iv, mos: bull.mos },
+    };
+  }
+
   return {
     avgNiAdj,
     predictR,
@@ -266,5 +341,47 @@ export function computeDCF(s, overrides = {}) {
     fvFinal,
     mos,
     impliedPe,
+    qualityScore,
+    qualityGrade,
+    qualityLabel,
+    verdict,
+    dataYear,
+    isStaleData,
+    scenarios,
   };
+}
+
+export function getStatBadge(type, val) {
+  if (type === 'r') {
+    if (val >= 0.85) return { text: 'Sangat Konsisten', tone: 'emerald' };
+    if (val >= 0.6) return { text: 'Cukup Konsisten', tone: 'amber' };
+    return { text: 'Tidak Menentu', tone: 'rose' };
+  }
+  if (type === 'cov') {
+    if (val <= 0.075) return { text: 'Margin Sangat Stabil', tone: 'emerald' };
+    if (val <= 0.15) return { text: 'Cukup Stabil', tone: 'amber' };
+    return { text: 'Margin Fluktuatif', tone: 'rose' };
+  }
+  if (type === 'roe') {
+    if (val >= 0.175) return { text: 'Sangat Efisien', tone: 'emerald' };
+    if (val >= 0.1) return { text: 'Cukup Baik', tone: 'amber' };
+    return { text: 'Profitabilitas Rendah', tone: 'rose' };
+  }
+  if (type === 'der') {
+    if (val <= 0.5) return { text: 'Utang Aman', tone: 'emerald' };
+    if (val <= 1.0) return { text: 'Utang Terkendali', tone: 'amber' };
+    return { text: 'Utang Tinggi', tone: 'rose' };
+  }
+  if (type === 'npm') {
+    if (val >= 0.15) return { text: 'Margin Tebal', tone: 'emerald' };
+    if (val >= 0.08) return { text: 'Margin Normal', tone: 'amber' };
+    return { text: 'Margin Tipis', tone: 'rose' };
+  }
+  if (type === 'cagr') {
+    if (val === null) return { text: 'N/A', tone: 'muted' };
+    if (val >= 0.12) return { text: 'Tumbuh Kencang', tone: 'emerald' };
+    if (val >= 0.04) return { text: 'Tumbuh Stabil', tone: 'amber' };
+    return { text: 'Melambat / Turun', tone: 'rose' };
+  }
+  return { text: '-', tone: 'muted' };
 }

@@ -42,3 +42,25 @@ test('CNMA & KLBF use pure linear interpolation for COV OPM Beta', () => {
   const covFactor = cnmaRes.factors.find((f) => f.key === 'cov');
   assert.ok(covFactor.beta > 0.7 && covFactor.beta < 0.9, `Expected interpolated COV beta ~0.79, got ${covFactor.beta}`);
 });
+
+test('V3: Quality Score, Grade A-D, 3 Scenarios, and Stale Data detection', () => {
+  const cmry = PRESETS.find((p) => p.ticker === 'CMRY');
+  const cmryRes = computeDCF(cmry, { refYear: 2026 });
+  assert.equal(cmryRes.qualityGrade, 'A');
+  assert.ok(cmryRes.qualityScore >= 75);
+  assert.equal(cmryRes.isStaleData, false);
+  assert.ok(cmryRes.scenarios.bear.fv < cmryRes.scenarios.base.fv);
+  assert.ok(cmryRes.scenarios.base.fv < cmryRes.scenarios.bull.fv);
+
+  const tlkm = PRESETS.find((p) => p.ticker === 'TLKM');
+  const tlkmRes = computeDCF(tlkm, { refYear: 2026 });
+  assert.equal(tlkmRes.dataYear, 2019);
+  assert.equal(tlkmRes.isStaleData, true);
+
+  // Value trap detection: Grade C/D with MoS >= 30%
+  const trapStock = { ...cmry, roe: 0.02, npm: 0.01, der: 3.5, marketCap: 0.5, price: 200 };
+  const trapRes = computeDCF(trapStock);
+  assert.ok(trapRes.qualityGrade === 'C' || trapRes.qualityGrade === 'D');
+  assert.ok(trapRes.verdict.title.includes('Value Trap'));
+});
+
