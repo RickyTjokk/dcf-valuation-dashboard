@@ -27,7 +27,7 @@
         <!-- Searchable Stock Selector Pill -->
         <div class="picker-wrap">
           <button id="btnPicker" type="button" class="stock-pill" aria-haspopup="listbox" aria-expanded="false">
-            <svg class="icon-sm muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <span id="pillLogo"></span>
             <span id="pillTicker" class="pill-ticker">BBRI</span>
             <span class="pill-sep">&middot;</span>
             <span id="pillName" class="pill-name">Bank Rakyat Indonesia</span>
@@ -194,6 +194,10 @@
               </div>
               <input id="inpShares" type="number" step="any" min="0.001" class="tabular-nums" />
             </div>
+          </div>
+          <div class="field mt-3">
+            <label for="inpNote">Catatan Pribadi (Opsional — tampil di Watchlist)</label>
+            <input id="inpNote" type="text" maxlength="120" placeholder="Contoh: Tunggu laporan Q4 2026, cicil bertahap di MoS 40%" />
           </div>
         </div>
 
@@ -706,10 +710,11 @@
         <div class="card">
           <div class="card-header">
             <div>
-              <h2 class="card-title">Watchlist &amp; Perbandingan 15 Emiten Utama</h2>
-              <p class="card-desc">Klik baris mana saja untuk membuka analisa lengkapnya. Gunakan tombol Refresh Semua untuk memperbarui harga live IDX.</p>
+              <h2 class="card-title">Watchlist &amp; Perbandingan Emiten</h2>
+              <p class="card-desc">Klik baris untuk buka analisa, &#9733; untuk favorit, &#9998; untuk edit data, atau hapus emiten yang tidak dipantau.</p>
             </div>
             <div class="btn-group">
+              <button id="btnRestorePresets" type="button" class="btn btn-ghost btn-sm hidden">Pulihkan Preset</button>
               <button id="btnRefreshAllWatchlist" type="button" class="btn btn-secondary">Refresh Semua Harga Live</button>
               <select id="selSortWatchlist">
                 <option value="mosDesc">Urutkan: MoS Tertinggi</option>
@@ -718,6 +723,13 @@
                 <option value="tickerAsc">Urutkan: Ticker A–Z</option>
               </select>
             </div>
+          </div>
+
+          <div class="watchlist-filters mb-3">
+            <button type="button" class="filter-pill active" data-wfilter="all">Semua</button>
+            <button type="button" class="filter-pill" data-wfilter="fav">&#9733; Favorit</button>
+            <button type="button" class="filter-pill" data-wfilter="buyable">Layak Beli (Grade A/B &amp; MoS &ge;30%)</button>
+            <button type="button" class="filter-pill" data-wfilter="stale">Data Perlu Update</button>
           </div>
           <div class="table-scroll">
             <table class="data-table">

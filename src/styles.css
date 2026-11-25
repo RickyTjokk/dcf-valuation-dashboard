@@ -562,6 +562,44 @@ body.mode-beginner .pro-only { display: none !important; }
 .ai-explain-item h4 { margin: 0 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--emerald); }
 .ai-explain-item p { margin: 0; color: var(--text); }
 
+/* V4 TICKER LOGO & EDITABLE WATCHLIST */
+.mb-3 { margin-bottom: 12px; }
+.ticker-logo {
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 8px; overflow: hidden; flex-shrink: 0;
+  background: #ffffff; border: 1px solid var(--border);
+}
+.ticker-logo img {
+  width: 100%; height: 100%; object-fit: contain; padding: 2px; display: block;
+}
+.ticker-monogram {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  color: #ffffff; font-weight: 800; letter-spacing: -0.02em;
+}
+.ticker-cell { display: flex; align-items: center; gap: 10px; }
+.watchlist-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.filter-pill {
+  padding: 5px 12px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  border: 1px solid var(--border); background: var(--surface-subtle); color: var(--text-muted);
+  cursor: pointer; font-family: inherit; transition: all 0.15s;
+}
+.filter-pill:hover { color: var(--text); }
+.filter-pill.active {
+  background: var(--primary); color: var(--primary-text); border-color: var(--primary);
+}
+.action-group { display: inline-flex; align-items: center; gap: 4px; }
+.btn-icon-sm {
+  width: 28px; height: 28px; border-radius: 7px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-muted);
+  cursor: pointer; font-size: 13px; transition: all 0.12s;
+}
+.btn-icon-sm:hover { color: var(--text); border-color: var(--emerald); }
+.btn-icon-sm.fav-btn.active { color: #eab308; border-color: rgba(234, 179, 8, 0.45); background: rgba(234, 179, 8, 0.12); }
+.btn-icon-sm.del-btn:hover { color: var(--rose); border-color: var(--rose); }
+.note-line { font-size: 11px; color: var(--emerald); font-weight: 500; margin-top: 2px; }
+
 .toast {
   position: fixed; bottom: 20px; right: 20px; z-index: 90;
   background: var(--primary); color: var(--primary-text);

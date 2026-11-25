@@ -1,11 +1,14 @@
 import { BETA_SCALE, DEFAULT_INF, computeDCF, getStatBadge } from '../engine/dcfEngine.js';
 import { PRESETS } from '../data/presets15.js';
+import { renderTickerLogoHtml } from '../data/tickerLogos.js';
 import { fetchLiveQuote, loadLiveSettings, saveLiveSettings } from '../services/marketApi.js';
 import { smartExtractFinancials, loadLocalGeminiKey, saveLocalGeminiKey } from '../services/smartParser.js';
 import { explainValuationAI } from '../services/aiAdvisor.js';
 import { renderPriceGauge, renderBetaChart, renderDcfChart, renderHistoryChart } from './charts.js';
 
 const STORAGE_KEY = 'dcf_lab_watchlist_v2';
+const HIDDEN_PRESETS_KEY = 'dcf_lab_hidden_presets_v4';
+const FAVORITES_KEY = 'dcf_lab_favorites_v4';
 const THEME_KEY = 'dcf_lab_theme_v2';
 const MODE_KEY = 'dcf_lab_ui_mode_v3';
 const clone = (o) => JSON.parse(JSON.stringify(o));
@@ -17,9 +20,9 @@ const fmtNum = (v, d = 2) =>
     : '-';
 const fmtPct = (v, d = 1) => (isFinite(v) ? (v * 100).toFixed(d) + '%' : '-');
 
-function loadWatchlist() {
+function loadJsonList(key) {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(key);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) return parsed;
@@ -28,13 +31,20 @@ function loadWatchlist() {
   return [];
 }
 
-function saveWatchlist(list) {
+function saveJsonList(key, list) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    localStorage.setItem(key, JSON.stringify(list));
   } catch {}
 }
 
+const loadWatchlist = () => loadJsonList(STORAGE_KEY);
+const saveWatchlist = (list) => saveJsonList(STORAGE_KEY, list);
+
 let customStocks = loadWatchlist();
+let hiddenPresetIds = loadJsonList(HIDDEN_PRESETS_KEY);
+let favoriteIds = loadJsonList(FAVORITES_KEY);
+let watchlistFilter = 'all';
+
 let state = clone(PRESETS[0]);
 let liveMeta = { status: 'preset', label: 'Preset' }; // 'preset' | 'live' | 'manual' | 'loading' | 'offline'
 let activeStep = 'step3';
@@ -170,9 +180,10 @@ async function syncLiveTicker(force = true) {
 // SEARCHABLE STOCK PICKER
 // =========================================================================
 function getAllStocks() {
+  const customTickers = new Set(customStocks.map((c) => c.ticker));
   return [
     ...customStocks.map((c) => ({ ...c, isCustom: true })),
-    ...PRESETS.filter((p) => !customStocks.some((c) => c.id === p.id)).map((p) => ({
+    ...PRESETS.filter((p) => !hiddenPresetIds.includes(p.id) && !customTickers.has(p.ticker)).map((p) => ({
       ...p,
       isCustom: false,
     })),
@@ -192,11 +203,14 @@ function renderPickerList(query = '') {
       const yr = s.history?.[0]?.year || '-';
       return `
         <button type="button" class="picker-item ${active}" data-pickid="${s.id}" data-iscustom="${s.isCustom}">
-          <div>
-            <strong>${s.ticker}</strong>
-            <span class="picker-item-sub">(${yr}) &middot; ${s.name}</span>
+          <div class="ticker-cell">
+            ${renderTickerLogoHtml(s.ticker, 24)}
+            <div>
+              <strong>${s.ticker}</strong>
+              <span class="picker-item-sub">(${yr}) &middot; ${s.name}</span>
+            </div>
           </div>
-          <span class="picker-item-sub tabular-nums">${s.isCustom ? 'Watchlist' : fmtRp(s.price)}</span>
+          <span class="picker-item-sub tabular-nums">${s.isCustom ? 'Saya' : fmtRp(s.price)}</span>
         </button>`;
     })
     .join('');
@@ -221,6 +235,7 @@ function createBlankStock(ticker = 'NEW') {
     id: 'CUSTOM_' + Date.now(),
     ticker: ticker.toUpperCase(),
     name: ticker === 'NEW' ? 'Emiten Baru' : ticker.toUpperCase(),
+    note: '',
     price: 1000,
     marketCap: 10,
     sharesOverride: null,
@@ -261,10 +276,12 @@ function createBlankStock(ticker = 'NEW') {
 // SYNC STATE <-> DOM
 // =========================================================================
 function syncInputsFromState() {
+  document.getElementById('pillLogo').innerHTML = renderTickerLogoHtml(state.ticker || 'NEW', 22);
   document.getElementById('pillTicker').textContent = state.ticker || 'NEW';
   document.getElementById('pillName').textContent = state.name || '';
   document.getElementById('inpTicker').value = state.ticker || '';
   document.getElementById('inpName').value = state.name || '';
+  document.getElementById('inpNote').value = state.note || '';
   document.getElementById('inpPrice').value = state.price;
   document.getElementById('inpMcap').value = state.marketCap;
 
@@ -344,6 +361,7 @@ function renderAll() {
   const res = computeDCF(state);
   updateLiveBadge();
 
+  document.getElementById('pillLogo').innerHTML = renderTickerLogoHtml(state.ticker || 'NEW', 22);
   document.getElementById('pillTicker').textContent = state.ticker || 'NEW';
   document.getElementById('pillName').textContent = state.name || '';
 
@@ -692,26 +710,66 @@ function renderMatrixOut(res) {
 }
 
 function renderWatchlistOut() {
-  const combined = getAllStocks().map((item) => ({ item, r: computeDCF(item) }));
+  const restoreBtn = document.getElementById('btnRestorePresets');
+  if (hiddenPresetIds.length > 0) {
+    restoreBtn.classList.remove('hidden');
+    restoreBtn.textContent = `Pulihkan Preset (${hiddenPresetIds.length})`;
+  } else {
+    restoreBtn.classList.add('hidden');
+  }
+
+  let combined = getAllStocks().map((item) => ({
+    item,
+    r: computeDCF(item),
+    isFav: favoriteIds.includes(item.ticker),
+  }));
+
+  if (watchlistFilter === 'fav') combined = combined.filter((x) => x.isFav);
+  else if (watchlistFilter === 'buyable')
+    combined = combined.filter(
+      (x) => (x.r.qualityGrade === 'A' || x.r.qualityGrade === 'B') && x.r.mos >= 0.3
+    );
+  else if (watchlistFilter === 'stale') combined = combined.filter((x) => x.r.isStaleData);
+
   const sortBy = document.getElementById('selSortWatchlist').value;
   combined.sort((a, b) => {
+    if (a.isFav !== b.isFav) return a.isFav ? -1 : 1;
     if (sortBy === 'mosDesc') return b.r.mos - a.r.mos;
     if (sortBy === 'qualityDesc') return b.r.qualityScore - a.r.qualityScore;
     if (sortBy === 'drAsc') return a.r.dr - b.r.dr;
     return a.item.ticker.localeCompare(b.item.ticker);
   });
 
+  if (!combined.length) {
+    document.getElementById('watchlistTbody').innerHTML =
+      '<tr><td colspan="9" class="center text-muted" style="padding:24px">Tidak ada emiten pada filter ini.</td></tr>';
+    return;
+  }
+
   document.getElementById('watchlistTbody').innerHTML = combined
-    .map(({ item, r }) => {
+    .map(({ item, r, isFav }) => {
       const mosColor = r.mos >= 0.3 ? 'var(--emerald)' : r.mos >= 0 ? 'var(--amber)' : 'var(--rose)';
-      const gTone = r.qualityGrade === 'A' || r.qualityGrade === 'B' ? 'emerald' : r.qualityGrade === 'C' ? 'amber' : 'rose';
+      const gTone =
+        r.qualityGrade === 'A' || r.qualityGrade === 'B'
+          ? 'emerald'
+          : r.qualityGrade === 'C'
+          ? 'amber'
+          : 'rose';
       const isCur = item.id === state.id;
       return `
         <tr style="cursor:pointer;${isCur ? 'background:var(--surface-subtle);font-weight:700' : ''}" data-loadid="${item.id}" data-iscustom="${item.isCustom}">
           <td>
-            <strong>${item.ticker}</strong>
-            ${item.isCustom ? '<span class="hint-chip">Saya</span>' : ''}
-            <div class="text-xs text-muted">${item.name}</div>
+            <div class="ticker-cell">
+              ${renderTickerLogoHtml(item.ticker, 30)}
+              <div>
+                <div>
+                  <strong>${item.ticker}</strong>
+                  ${item.isCustom ? '<span class="hint-chip">Saya</span>' : ''}
+                </div>
+                <div class="text-xs text-muted">${item.name}</div>
+                ${item.note ? `<div class="note-line">${item.note}</div>` : ''}
+              </div>
+            </div>
           </td>
           <td class="center"><span class="mini-badge ${gTone}">Grade ${r.qualityGrade} (${r.qualityScore})</span></td>
           <td class="center"><span class="mini-badge ${r.isStaleData ? 'amber' : 'muted'}">LK ${r.dataYear || '-'}</span></td>
@@ -721,7 +779,11 @@ function renderWatchlistOut() {
           <td class="num tabular-nums">${fmtRp(r.fvFinal)}</td>
           <td class="num tabular-nums font-bold" style="color:${mosColor}">${(r.mos * 100).toFixed(1)}%</td>
           <td class="center">
-            ${item.isCustom ? `<button type="button" class="btn btn-danger btn-sm" data-delid="${item.id}">Hapus</button>` : '<span class="text-xs text-muted">Preset</span>'}
+            <div class="action-group">
+              <button type="button" class="btn-icon-sm fav-btn ${isFav ? 'active' : ''}" data-favticker="${item.ticker}" title="Favorit">&#9733;</button>
+              <button type="button" class="btn-icon-sm" data-editid="${item.id}" data-iscustom="${item.isCustom}" title="Edit Data">&#9998;</button>
+              <button type="button" class="btn-icon-sm del-btn" data-delid="${item.id}" data-iscustom="${item.isCustom}" data-delticker="${item.ticker}" title="Hapus dari Watchlist">&#128465;</button>
+            </div>
           </td>
         </tr>`;
     })
@@ -899,6 +961,9 @@ document.getElementById('inpName').addEventListener('input', (e) => {
   state.name = e.target.value;
   document.getElementById('pillName').textContent = state.name;
 });
+document.getElementById('inpNote').addEventListener('input', (e) => {
+  state.note = e.target.value;
+});
 document.getElementById('inpPrice').addEventListener('input', (e) => {
   state.price = parseFloat(e.target.value) || 0;
   liveMeta = { status: 'manual', label: 'Manual' };
@@ -1059,15 +1124,76 @@ document.getElementById('selProjRows').addEventListener('change', () => renderAl
 document.getElementById('selMatrixMetric').addEventListener('change', () => renderAll());
 document.getElementById('selSortWatchlist').addEventListener('change', () => renderAll());
 
+document.querySelectorAll('.filter-pill').forEach((btn) =>
+  btn.addEventListener('click', () => {
+    watchlistFilter = btn.dataset.wfilter;
+    document.querySelectorAll('.filter-pill').forEach((b) => b.classList.toggle('active', b === btn));
+    renderWatchlistOut();
+  })
+);
+
+document.getElementById('btnRestorePresets').addEventListener('click', () => {
+  hiddenPresetIds = [];
+  saveJsonList(HIDDEN_PRESETS_KEY, hiddenPresetIds);
+  renderWatchlistOut();
+  showToast('Semua emiten preset dipulihkan');
+});
+
 document.getElementById('watchlistTbody').addEventListener('click', (e) => {
-  const delId = e.target.dataset.delid;
-  if (delId) {
+  const favBtn = e.target.closest('[data-favticker]');
+  if (favBtn) {
     e.stopPropagation();
-    customStocks = customStocks.filter((c) => c.id !== delId);
-    saveWatchlist(customStocks);
-    renderAll();
-    return showToast('Emiten dihapus dari Watchlist');
+    const t = favBtn.dataset.favticker;
+    if (favoriteIds.includes(t)) favoriteIds = favoriteIds.filter((x) => x !== t);
+    else favoriteIds.push(t);
+    saveJsonList(FAVORITES_KEY, favoriteIds);
+    renderWatchlistOut();
+    return;
   }
+
+  const editBtn = e.target.closest('[data-editid]');
+  if (editBtn) {
+    e.stopPropagation();
+    const loadId = editBtn.dataset.editid;
+    const isCust = editBtn.dataset.iscustom === 'true';
+    const src = isCust ? customStocks.find((c) => c.id === loadId) : PRESETS.find((p) => p.id === loadId);
+    if (src) {
+      state = clone(src);
+      liveMeta = { status: 'preset', label: isCust ? 'Watchlist' : 'Preset' };
+      syncInputsFromState();
+      renderAll();
+      setStep('step1');
+      showToast(`Mengedit ${state.ticker} — klik Simpan setelah selesai`);
+    }
+    return;
+  }
+
+  const delBtn = e.target.closest('[data-delid]');
+  if (delBtn) {
+    e.stopPropagation();
+    const delId = delBtn.dataset.delid;
+    const delTicker = delBtn.dataset.delticker;
+    const isCust = delBtn.dataset.iscustom === 'true';
+
+    if (isCust) {
+      customStocks = customStocks.filter((c) => c.id !== delId);
+      saveWatchlist(customStocks);
+      // Also hide matching preset if user had overridden a preset
+      const matchPreset = PRESETS.find((p) => p.ticker === delTicker);
+      if (matchPreset && !hiddenPresetIds.includes(matchPreset.id)) {
+        hiddenPresetIds.push(matchPreset.id);
+        saveJsonList(HIDDEN_PRESETS_KEY, hiddenPresetIds);
+      }
+    } else {
+      if (!hiddenPresetIds.includes(delId)) {
+        hiddenPresetIds.push(delId);
+        saveJsonList(HIDDEN_PRESETS_KEY, hiddenPresetIds);
+      }
+    }
+    renderAll();
+    return showToast(`${delTicker} dihapus dari Watchlist`);
+  }
+
   const tr = e.target.closest('tr[data-loadid]');
   if (!tr) return;
   const loadId = tr.dataset.loadid;
