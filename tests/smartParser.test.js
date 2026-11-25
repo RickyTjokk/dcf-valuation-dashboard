@@ -71,3 +71,15 @@ NPM: 27.1%
   assert.equal(res.der, 0.63);
   assert.equal(res.npm, 0.271);
 });
+
+test('parseFinancialTextLocal extracts OCF and FCF in Milyar/Triliun', () => {
+  const sample = `
+CMRY
+Operating Cash Flow: 1.85 T
+FCF: 1,420 B
+  `;
+  const res = normalizeParsedResult(parseFinancialTextLocal(sample));
+  assert.equal(res.ticker, 'CMRY');
+  assert.equal(res.ocf, 1850);
+  assert.equal(res.fcf, 1420);
+});

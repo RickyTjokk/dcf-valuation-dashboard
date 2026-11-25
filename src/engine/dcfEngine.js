@@ -79,10 +79,65 @@ export function percentileInc(arr, p) {
   return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
 }
 
+function project100Y(epsBase, g1, g2, safeDr, s) {
+  const rows = [];
+  let iv = 0;
+  let fv10 = 0;
+  let pvY10 = 0;
+  let pvY30 = 0;
+  let pvY100 = 0;
+
+  for (let i = 1; i <= 100; i++) {
+    let fv = 0;
+    if (i <= 10) {
+      if (s.y1Mode === 'flat1' && i === 1) {
+        fv = epsBase;
+      } else if (s.y1Mode === 'recovery') {
+        if (i === 1) fv = epsBase * (Number(s.y1Mult) || 1);
+        else if (i === 2 && s.y2Mult !== null && s.y2Mult !== undefined && s.y2Mult !== '')
+          fv = epsBase * Number(s.y2Mult);
+        else if (i === 3 && s.y3Mult !== null && s.y3Mult !== undefined && s.y3Mult !== '')
+          fv = epsBase * Number(s.y3Mult);
+        else fv = epsBase * Math.pow(1 + g1, i);
+      } else {
+        fv = epsBase * Math.pow(1 + g1, i);
+      }
+      if (i === 10) fv10 = fv;
+    } else {
+      fv = fv10 * Math.pow(1 + g2, i - 10);
+    }
+    const pv = fv / Math.pow(1 + safeDr, i);
+    iv += pv;
+    if (i <= 10) pvY10 += pv;
+    else if (i <= 30) pvY30 += pv;
+    else pvY100 += pv;
+    rows.push({ year: i, fv, pv, cumPv: iv });
+  }
+  return { rows, iv, pvY10, pvY30, pvY100 };
+}
+
+function solveImpliedGrowthG1(price, epsBase, g2, safeDr, s) {
+  if (!(price > 0) || !(epsBase > 0)) return null;
+  let lo = -0.35;
+  let hi = 0.65;
+  const ivLo = project100Y(epsBase, lo, g2, safeDr, s).iv;
+  if (ivLo >= price) return lo;
+  const ivHi = project100Y(epsBase, hi, g2, safeDr, s).iv;
+  if (ivHi <= price) return hi;
+  for (let iter = 0; iter < 50; iter++) {
+    const mid = (lo + hi) / 2;
+    const ivMid = project100Y(epsBase, mid, g2, safeDr, s).iv;
+    if (ivMid < price) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
 export function computeDCF(s, overrides = {}) {
   const g1 = overrides.g1 !== undefined ? overrides.g1 : Number(s.g1) || 0;
   const g2 = overrides.g2 !== undefined ? overrides.g2 : Number(s.g2) || 0;
   const hist = Array.isArray(s.history) ? s.history : [];
+  const isBankMode = Boolean(s.isBankMode);
 
   const years = hist.map((h) => Number(h.year) || 0);
   const nis = hist.map((h) => Number(h.ni) || 0);
@@ -125,6 +180,10 @@ export function computeDCF(s, overrides = {}) {
   const roe = Number(s.roe) || 0;
   const der = Number(s.der) || 0;
   const npm = Number(s.npm) || 0;
+  const derThresholds = isBankMode ? [3.0, 5.0, 6.5, 8.0, 11.0] : [0.1, 0.25, 0.5, 1.0, 3.0];
+  const derThFmt = isBankMode
+    ? ['<3.0x', '5.0x', '6.5x', '8.0x', '11.0x']
+    : ['<0.10', '0.25', '0.50', '1.00', '3.00'];
 
   const factors = [
     {
@@ -137,11 +196,11 @@ export function computeDCF(s, overrides = {}) {
     },
     {
       key: 'der',
-      label: 'DER',
+      label: isBankMode ? 'DER (Bank)' : 'DER',
       val: der,
       fmt: (v) => v.toFixed(2) + 'x',
-      beta: interpAsc(der, [0.1, 0.25, 0.5, 1.0, 3.0]),
-      thFmt: ['<0.10', '0.25', '0.50', '1.00', '3.00'],
+      beta: interpAsc(der, derThresholds),
+      thFmt: derThFmt,
     },
     {
       key: 'npm',
@@ -184,39 +243,7 @@ export function computeDCF(s, overrides = {}) {
   const dr = overrides.dr !== undefined ? overrides.dr : rf + betaFinal * (rm - rf);
   const safeDr = Math.max(0.01, dr);
 
-  const rows = [];
-  let iv = 0;
-  let fv10 = 0;
-  let pvY10 = 0;
-  let pvY30 = 0;
-  let pvY100 = 0;
-
-  for (let i = 1; i <= 100; i++) {
-    let fv = 0;
-    if (i <= 10) {
-      if (s.y1Mode === 'flat1' && i === 1) {
-        fv = epsBase;
-      } else if (s.y1Mode === 'recovery') {
-        if (i === 1) fv = epsBase * (Number(s.y1Mult) || 1);
-        else if (i === 2 && s.y2Mult !== null && s.y2Mult !== undefined && s.y2Mult !== '')
-          fv = epsBase * Number(s.y2Mult);
-        else if (i === 3 && s.y3Mult !== null && s.y3Mult !== undefined && s.y3Mult !== '')
-          fv = epsBase * Number(s.y3Mult);
-        else fv = epsBase * Math.pow(1 + g1, i);
-      } else {
-        fv = epsBase * Math.pow(1 + g1, i);
-      }
-      if (i === 10) fv10 = fv;
-    } else {
-      fv = fv10 * Math.pow(1 + g2, i - 10);
-    }
-    const pv = fv / Math.pow(1 + safeDr, i);
-    iv += pv;
-    if (i <= 10) pvY10 += pv;
-    else if (i <= 30) pvY30 += pv;
-    else pvY100 += pv;
-    rows.push({ year: i, fv, pv, cumPv: iv });
-  }
+  const { rows, iv, pvY10, pvY30, pvY100 } = project100Y(epsBase, g1, g2, safeDr, s);
 
   const bvps = Number(s.bvps) || 0;
   const peItems = [
@@ -343,6 +370,138 @@ export function computeDCF(s, overrides = {}) {
     };
   }
 
+  // 4-Way Growth & Reverse DCF (Implied Market Growth g1)
+  const retentionRatio = Math.max(0, Math.min(1, 1 - payoutRatio));
+  const sgr = roe > 0 ? Math.max(0, roe * retentionRatio) : 0;
+  const impliedG1 = overrides._skipReverseDcf
+    ? null
+    : solveImpliedGrowthG1(price, epsBase, g2, safeDr, s);
+
+  const benchmarkCap = cagr !== null ? Math.min(sgr, Math.max(0, cagr)) : sgr;
+  let growthSignal = {
+    tone: 'muted',
+    label: 'Asumsi Realistis',
+    desc: `Asumsi g1 (${(g1 * 100).toFixed(1)}%) masih sejalan dengan kapasitas organik SGR (${(sgr * 100).toFixed(1)}%).`,
+  };
+  if (impliedG1 !== null && benchmarkCap - impliedG1 >= 0.03) {
+    growthSignal = {
+      tone: 'emerald',
+      label: 'Peluang Mispricing',
+      desc: `Pasar hanya menghargai growth ${(impliedG1 * 100).toFixed(1)}%/thn, padahal kapasitas bisnis ${(benchmarkCap * 100).toFixed(1)}%/thn.`,
+    };
+  } else if (g1 > sgr + 0.05 && (cagr === null || g1 > cagr + 0.05)) {
+    growthSignal = {
+      tone: 'amber',
+      label: 'Asumsi Agresif',
+      desc: `Asumsi g1 (${(g1 * 100).toFixed(1)}%) melampaui SGR organik (${(sgr * 100).toFixed(1)}%)${
+        cagr !== null ? ` dan CAGR (${(cagr * 100).toFixed(1)}%)` : ''
+      }.`,
+    };
+  }
+
+  // Expected Total Return 5-Year (CAGR from Earnings Growth + Re-rating + Dividends)
+  let expectedReturn5Y = null;
+  if (price > 0 && epsBase > 0 && fvFinal > 0 && rows.length >= 5) {
+    const epsY5 = rows[4].fv;
+    const targetPrice5Y = fvFinal * (epsY5 / epsBase);
+    let cumDiv5Y = 0;
+    if (dps > 0) {
+      let divPrev = dps;
+      for (let i = 1; i <= 5; i++) {
+        divPrev = divPrev * (1 + ddmG1);
+        cumDiv5Y += divPrev;
+      }
+    }
+    const totalEnd5Y = targetPrice5Y + cumDiv5Y;
+    const totalCagr5Y = totalEnd5Y > 0 ? Math.pow(totalEnd5Y / price, 1 / 5) - 1 : null;
+    const growthDriver = epsY5 > 0 ? Math.pow(epsY5 / epsBase, 1 / 5) - 1 : 0;
+    const reratingDriver = Math.pow(fvFinal / price, 1 / 5) - 1;
+    expectedReturn5Y = {
+      totalCagr5Y,
+      growthDriver,
+      reratingDriver,
+      divDriver: divYield,
+      targetPrice5Y,
+      cumDiv5Y,
+    };
+  }
+
+  // DuPont ROE Decomposition
+  const equityMultiplier = 1 + Math.max(0, der);
+  const roaImplied = roe / equityMultiplier;
+  const assetTurnoverImplied = npm > 0 ? roaImplied / npm : 0;
+  let dupontDriver = {
+    tone: 'amber',
+    label: 'Profitabilitas Moderat',
+    desc: `ROE ${(roe * 100).toFixed(1)}% dengan ROA implied ${(roaImplied * 100).toFixed(1)}%.`,
+  };
+  if (isBankMode) {
+    if (roaImplied >= 0.022 && roe >= 0.15) {
+      dupontDriver = {
+        tone: 'emerald',
+        label: 'Bank Sangat Efisien',
+        desc: `ROA implied ${(roaImplied * 100).toFixed(2)}% sangat kuat untuk sektor perbankan.`,
+      };
+    } else if (roaImplied < 0.01) {
+      dupontDriver = {
+        tone: 'rose',
+        label: 'Efisiensi Bank Tipis',
+        desc: `ROA implied ${(roaImplied * 100).toFixed(2)}% relatif rendah untuk bank.`,
+      };
+    }
+  } else {
+    if (roe >= 0.15 && der <= 0.8) {
+      dupontDriver = {
+        tone: 'emerald',
+        label: 'Efisiensi & Margin Murni',
+        desc: `ROE ${(roe * 100).toFixed(1)}% ditopang margin & perputaran aset, bukan utang (DER ${der.toFixed(2)}x).`,
+      };
+    } else if (roe >= 0.15 && der > 1.2) {
+      dupontDriver = {
+        tone: 'amber',
+        label: 'Terdongkrak Leverage Utang',
+        desc: `ROE ${(roe * 100).toFixed(1)}% tinggi sebagian karena utang (DER ${der.toFixed(2)}x, ROA ${(roaImplied * 100).toFixed(1)}%).`,
+      };
+    } else if (roe < 0.08) {
+      dupontDriver = {
+        tone: 'rose',
+        label: 'Profitabilitas Rendah',
+        desc: `ROE ${(roe * 100).toFixed(1)}% di bawah standar bisnis unggul.`,
+      };
+    }
+  }
+  const dupont = {
+    equityMultiplier,
+    roaImplied,
+    assetTurnoverImplied,
+    isBankMode,
+    driver: dupontDriver,
+  };
+
+  // Optional Cash Flow Quality (OCF / FCF Conversion)
+  const latestNi = hist.length ? Number(hist[0].ni) || 0 : 0;
+  const ocfVal = s.ocf !== null && s.ocf !== undefined && s.ocf !== '' ? Number(s.ocf) : null;
+  const fcfVal = s.fcf !== null && s.fcf !== undefined && s.fcf !== '' ? Number(s.fcf) : null;
+  const ocfConversion = ocfVal !== null && latestNi > 0 ? ocfVal / latestNi : null;
+  const fcfConversion = fcfVal !== null && latestNi > 0 ? fcfVal / latestNi : null;
+  const fcfYield = fcfVal !== null && marketCap > 0 ? fcfVal / (marketCap * 1000) : null;
+  const primaryConv = ocfConversion !== null ? ocfConversion : fcfConversion;
+  let cashStatus = { tone: 'muted', label: 'Belum Diisi' };
+  if (primaryConv !== null) {
+    if (primaryConv >= 0.9) cashStatus = { tone: 'emerald', label: 'Kas Tunai Kuat' };
+    else if (primaryConv >= 0.6) cashStatus = { tone: 'amber', label: 'Konversi Kas Moderat' };
+    else cashStatus = { tone: 'rose', label: 'Waspada Akrual / Kas Seret' };
+  }
+  const cashQuality = {
+    ocf: ocfVal,
+    fcf: fcfVal,
+    latestNi,
+    ocfConversion,
+    fcfConversion,
+    fcfYield,
+    status: cashStatus,
+  };
+
   const dataYear = years.length ? Math.max(...years) : null;
   const refYear = overrides.refYear || new Date().getFullYear();
   const isStaleData = dataYear !== null && dataYear < refYear - 2;
@@ -355,12 +514,14 @@ export function computeDCF(s, overrides = {}) {
       ddmG1: Math.max(-0.05, ddmG1 - 0.03),
       dr: safeDr + 0.01,
       _skipScenarios: true,
+      _skipReverseDcf: true,
     });
     const bull = computeDCF(s, {
       g1: Math.min(0.4, baseG1 + 0.03),
       ddmG1: Math.min(0.4, ddmG1 + 0.03),
       dr: Math.max(0.03, safeDr - 0.01),
       _skipScenarios: true,
+      _skipReverseDcf: true,
     });
     scenarios = {
       bear: { label: 'Pesimis (Konservatif)', g1: Math.max(-0.05, baseG1 - 0.03), dr: safeDr + 0.01, fv: bear.fvFinal, iv: bear.iv, mos: bear.mos },
@@ -408,6 +569,13 @@ export function computeDCF(s, overrides = {}) {
     pegy,
     lynchMos,
     lynchCategory,
+    sgr,
+    impliedG1,
+    growthSignal,
+    expectedReturn5Y,
+    dupont,
+    cashQuality,
+    isBankMode,
     fvFinal,
     mos,
     impliedPe,
@@ -421,7 +589,65 @@ export function computeDCF(s, overrides = {}) {
   };
 }
 
-export function getStatBadge(type, val) {
+export function compareStocks(stockList) {
+  const items = (Array.isArray(stockList) ? stockList : [])
+    .filter(Boolean)
+    .slice(0, 3)
+    .map((stock) => ({ stock, res: computeDCF(stock) }));
+
+  if (!items.length) return { items: [], winners: { value: null, quality: null, growth: null } };
+
+  const pickBest = (scoreFn) => {
+    let best = items[0];
+    let bestScore = -Infinity;
+    for (const entry of items) {
+      const sc = scoreFn(entry);
+      if (sc > bestScore) {
+        bestScore = sc;
+        best = entry;
+      }
+    }
+    return { ticker: best.stock.ticker, name: best.stock.name, score: bestScore, entry: best };
+  };
+
+  const valueWinner = pickBest(({ res }) => {
+    const mosPart = Math.max(-1, Math.min(1, res.mos)) * 60;
+    const divPart = Math.min(0.15, res.divYield) * 166.67;
+    const grahamPart = res.grahamNumber > 0 ? Math.max(-0.5, Math.min(0.5, res.grahamMos)) * 30 : 0;
+    return mosPart + divPart + grahamPart;
+  });
+
+  const qualityWinner = pickBest(({ res }) => {
+    const qPart = res.qualityScore * 0.55;
+    const roaPart = Math.min(0.25, Math.max(0, res.dupont.roaImplied)) * 100;
+    const rPart = Math.max(0, res.predictR) * 15;
+    const cashPart =
+      res.cashQuality.ocfConversion !== null
+        ? Math.min(1.2, Math.max(0, res.cashQuality.ocfConversion)) * 5
+        : 3;
+    return qPart + roaPart + rPart + cashPart;
+  });
+
+  const growthWinner = pickBest(({ stock, res }) => {
+    const ret5Y = res.expectedReturn5Y?.totalCagr5Y ?? 0;
+    const retPart = Math.max(-0.2, Math.min(0.45, ret5Y)) * 100;
+    const pegyPart =
+      res.pegy > 0 ? Math.max(0, Math.min(35, (2.2 - Math.min(2.2, res.pegy)) * 18)) : 10;
+    const gCap = Math.max(0, Math.min(0.3, res.sgr || Number(stock.g1) || 0)) * 66.67;
+    return retPart + pegyPart + gCap;
+  });
+
+  return {
+    items,
+    winners: {
+      value: valueWinner,
+      quality: qualityWinner,
+      growth: growthWinner,
+    },
+  };
+}
+
+export function getStatBadge(type, val, opts = {}) {
   if (type === 'r') {
     if (val >= 0.85) return { text: 'Sangat Konsisten', tone: 'emerald' };
     if (val >= 0.6) return { text: 'Cukup Konsisten', tone: 'amber' };
@@ -438,6 +664,11 @@ export function getStatBadge(type, val) {
     return { text: 'Profitabilitas Rendah', tone: 'rose' };
   }
   if (type === 'der') {
+    if (opts.isBankMode) {
+      if (val <= 6.5) return { text: 'DER Bank Sehat', tone: 'emerald' };
+      if (val <= 9.0) return { text: 'DER Bank Wajar', tone: 'amber' };
+      return { text: 'Leverage Bank Tinggi', tone: 'rose' };
+    }
     if (val <= 0.5) return { text: 'Utang Aman', tone: 'emerald' };
     if (val <= 1.0) return { text: 'Utang Terkendali', tone: 'amber' };
     return { text: 'Utang Tinggi', tone: 'rose' };

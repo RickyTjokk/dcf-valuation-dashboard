@@ -1,4 +1,4 @@
-import { BETA_SCALE, DEFAULT_INF, computeDCF, getStatBadge } from '../engine/dcfEngine.js';
+import { BETA_SCALE, DEFAULT_INF, computeDCF, compareStocks, getStatBadge } from '../engine/dcfEngine.js';
 import { PRESETS } from '../data/presets15.js';
 import { renderTickerLogoHtml } from '../data/tickerLogos.js';
 import { fetchLiveQuote, loadLiveSettings, saveLiveSettings } from '../services/marketApi.js';
@@ -44,6 +44,7 @@ let customStocks = loadWatchlist();
 let hiddenPresetIds = loadJsonList(HIDDEN_PRESETS_KEY);
 let favoriteIds = loadJsonList(FAVORITES_KEY);
 let watchlistFilter = 'all';
+let compareIds = ['BBRI', 'BBCA', 'CMRY'];
 
 let state = clone(PRESETS[0]);
 let liveMeta = { status: 'preset', label: 'Preset' }; // 'preset' | 'live' | 'manual' | 'loading' | 'offline'
@@ -284,6 +285,9 @@ function createBlankStock(ticker = 'NEW') {
     ddmG1: null,
     ddmG2: null,
     includeLynch: false,
+    isBankMode: false,
+    ocf: null,
+    fcf: null,
   };
 }
 
@@ -313,6 +317,9 @@ function syncInputsFromState() {
   document.getElementById('inpNpm').value = Number((state.npm * 100).toFixed(2));
   document.getElementById('inpEpsTtm').value = state.epsTTM;
   document.getElementById('inpBvps').value = state.bvps;
+  document.getElementById('chkBankMode').checked = !!state.isBankMode;
+  document.getElementById('inpOcf').value = state.ocf !== null && state.ocf !== undefined ? state.ocf : '';
+  document.getElementById('inpFcf').value = state.fcf !== null && state.fcf !== undefined ? state.fcf : '';
 
   document.getElementById('inpG1').value = Number((state.g1 * 100).toFixed(1));
   document.getElementById('rngG1').value = Number((state.g1 * 100).toFixed(1));
@@ -416,14 +423,46 @@ function renderAll() {
   setMiniBadge('badgeCov', getStatBadge('cov', res.covOpm));
   setMiniBadge('badgeCagr', getStatBadge('cagr', res.cagr));
   setMiniBadge('badgeRoe', getStatBadge('roe', state.roe));
-  setMiniBadge('badgeDer', getStatBadge('der', state.der));
+  setMiniBadge('badgeDer', getStatBadge('der', state.der, { isBankMode: state.isBankMode }));
   setMiniBadge('badgeNpm', getStatBadge('npm', state.npm));
 
-  // Patokan CAGR di Step 2
+  // DuPont ROE Step 2 mini strip
+  const dupEl = document.getElementById('dupontStep2Strip');
+  if (dupEl) {
+    dupEl.innerHTML = `
+      <div class="label-row">
+        <span class="text-xs font-semibold">Bedah DuPont ROE</span>
+        <span class="mini-badge ${res.dupont.driver.tone}">${res.dupont.driver.label}</span>
+      </div>
+      <div class="text-xs text-muted tabular-nums mt-1">ROA Implied: <strong>${fmtPct(res.dupont.roaImplied, 2)}</strong> &middot; Equity Mult: <strong>${res.dupont.equityMultiplier.toFixed(2)}x</strong></div>
+    `;
+  }
+
+  // Cash conversion badge Step 2
+  const cashBadge = document.getElementById('dispCashConvBadge');
+  if (cashBadge) {
+    const conv = res.cashQuality.ocfConversion ?? res.cashQuality.fcfConversion;
+    cashBadge.textContent = conv !== null ? `${(conv * 100).toFixed(0)}% (${res.cashQuality.status.label})` : 'Opsional';
+    cashBadge.className = `mini-badge ${res.cashQuality.status.tone}`;
+  }
+
+  // Patokan CAGR + 4-Way Growth Check di Step 2
   const cagrPct = res.cagr !== null ? (res.cagr * 100).toFixed(1) + '%' : 'N/A';
   const recCons = res.cagr !== null ? Math.max(3, Math.min(10, Math.round(res.cagr * 50))) : 5;
   document.getElementById('cagrGuideText').innerHTML =
     `CAGR laba historis: <strong>${cagrPct}</strong> &mdash; patokan aman value investor biasanya sekitar <strong>${recCons}%–12%</strong>.`;
+
+  const sanityEl = document.getElementById('step2GrowthSanity');
+  if (sanityEl) {
+    const impText = res.impliedG1 !== null ? fmtPct(res.impliedG1, 1) : '-';
+    sanityEl.innerHTML = `
+      <div class="sanity-chips tabular-nums">
+        <span>Implied Pasar: <strong>${impText}</strong></span>
+        <span>SGR Organik: <strong>${fmtPct(res.sgr, 1)}</strong></span>
+      </div>
+      <div class="sanity-note ${res.growthSignal.tone}"><strong>${res.growthSignal.label}:</strong> ${res.growthSignal.desc}</div>
+    `;
+  }
 
   // History Chart in Step 1
   renderHistoryChart(document.getElementById('step1HistoryChart'), { history: state.history });
@@ -579,6 +618,7 @@ function renderAll() {
   renderBetaOut(res);
   renderProjectionOut(res);
   renderMatrixOut(res);
+  renderCompareOut();
   renderWatchlistOut();
 }
 
@@ -670,6 +710,71 @@ function renderOverviewOut(res) {
           </div>`;
       })
       .join('');
+  }
+
+  // Kedalaman Fundamental & Estimasi Return 5 Tahun Card
+  const depthEl = document.getElementById('fundamentalDepthCard');
+  if (depthEl) {
+    const exp = res.expectedReturn5Y;
+    const expPct = exp && exp.totalCagr5Y !== null ? (exp.totalCagr5Y * 100).toFixed(1) : null;
+    const expTone = exp && exp.totalCagr5Y >= 0.15 ? 'emerald' : exp && exp.totalCagr5Y >= 0.08 ? 'amber' : 'rose';
+    const bars = [
+      { label: 'Implied Pasar', val: res.impliedG1, color: res.impliedG1 !== null && res.impliedG1 < (res.sgr || 0) ? 'var(--emerald)' : 'var(--amber)' },
+      { label: 'Asumsi g1', val: Number(state.g1) || 0, color: 'var(--primary)' },
+      { label: 'SGR Organik', val: res.sgr, color: '#0d9488' },
+      { label: 'CAGR Historis', val: res.cagr, color: '#6366f1' },
+    ];
+    const maxBar = Math.max(0.15, ...bars.map((b) => (b.val !== null && b.val > 0 ? b.val : 0)));
+    const convText =
+      res.cashQuality.ocfConversion !== null
+        ? `OCF/NI ${(res.cashQuality.ocfConversion * 100).toFixed(0)}% (${res.cashQuality.status.label})`
+        : res.cashQuality.fcfConversion !== null
+        ? `FCF/NI ${(res.cashQuality.fcfConversion * 100).toFixed(0)}% (${res.cashQuality.status.label})`
+        : 'Belum diisi (opsional di Step 2)';
+
+    depthEl.innerHTML = `
+      <div class="card-header">
+        <div>
+          <h3 class="card-title">Kedalaman Fundamental &amp; Estimasi Return 5 Tahun</h3>
+          <p class="card-desc">Menggabungkan potensi return 5Y, Reverse DCF (ekspektasi pasar), kualitas DuPont ROE, dan arus kas.</p>
+        </div>
+        <span class="mini-badge ${res.growthSignal.tone}">${res.growthSignal.label}</span>
+      </div>
+      <div class="depth-grid">
+        <div class="depth-return-box tone-${expTone}">
+          <div class="eyebrow" style="color:inherit;opacity:0.85">Estimasi Total Return 5 Thn (CAGR)</div>
+          <div class="depth-return-val tabular-nums">${expPct !== null ? `${exp.totalCagr5Y >= 0 ? '+' : ''}${expPct}% / thn` : '-'}</div>
+          <div class="depth-return-drivers tabular-nums">
+            ${
+              exp
+                ? `Growth ${(exp.growthDriver * 100).toFixed(1)}% &middot; Re-rating ${(exp.reratingDriver * 100).toFixed(1)}% &middot; Div ${(exp.divDriver * 100).toFixed(1)}%`
+                : 'Butuh Harga & EPS > 0'
+            }
+          </div>
+        </div>
+
+        <div class="depth-bars-box">
+          <div class="text-xs font-semibold mb-2">4-Way Growth &amp; Reverse DCF Check</div>
+          <div class="growth-bars">
+            ${bars
+              .map((b) => {
+                const w = b.val !== null && b.val > 0 ? Math.min(100, Math.round((b.val / maxBar) * 100)) : 0;
+                return `
+                  <div class="growth-bar-row">
+                    <span class="growth-bar-lbl">${b.label}</span>
+                    <div class="growth-bar-track"><div class="growth-bar-fill" style="width:${w}%;background:${b.color}"></div></div>
+                    <span class="growth-bar-num tabular-nums">${b.val !== null ? fmtPct(b.val, 1) : 'N/A'}</span>
+                  </div>`;
+              })
+              .join('')}
+          </div>
+          <div class="depth-badges-row mt-2">
+            <span class="depth-pill ${res.dupont.driver.tone}">DuPont ROE: <strong>${res.dupont.driver.label}</strong> (ROA ${fmtPct(res.dupont.roaImplied, 1)}${res.isBankMode ? ' · Mode Bank' : ''})</span>
+            <span class="depth-pill ${res.cashQuality.status.tone}">Arus Kas: <strong>${convText}</strong></span>
+          </div>
+        </div>
+      </div>
+    `;
   }
 
   document.getElementById('overviewKpiChips').innerHTML = `
@@ -865,6 +970,223 @@ function renderMatrixOut(res) {
   document.getElementById('matrixContainer').innerHTML = html;
 }
 
+function syncCompareFloatingBar() {
+  const bar = document.getElementById('compareFloatingBar');
+  const txt = document.getElementById('compareFloatingText');
+  const cnt = document.getElementById('compareTabCount');
+  if (cnt) cnt.textContent = String(compareIds.length);
+  if (!bar || !txt) return;
+  if (activeStep === 'watchlist' && compareIds.length >= 2) {
+    bar.classList.remove('hidden');
+    txt.textContent = `${compareIds.join(' vs ')} (${compareIds.length} emiten)`;
+  } else {
+    bar.classList.add('hidden');
+  }
+}
+
+function resolveComparePool() {
+  const all = getAllStocks();
+  const map = new Map();
+  all.forEach((item) => map.set(item.ticker, item));
+  if (state && state.ticker) map.set(state.ticker, state);
+  return map;
+}
+
+function renderCompareOut() {
+  const selWrap = document.getElementById('compareSelectors');
+  const winWrap = document.getElementById('compareWinnersGrid');
+  const matWrap = document.getElementById('compareMatrixContainer');
+  if (!selWrap || !winWrap || !matWrap) return;
+
+  const poolMap = resolveComparePool();
+  const poolList = Array.from(poolMap.values());
+  const optionsHtml = poolList
+    .map((s) => `<option value="${s.ticker}">${s.ticker} — ${s.name}</option>`)
+    .join('');
+
+  // Ensure compareIds contains valid tickers, fallback cleanly
+  const validIds = compareIds.filter((t) => poolMap.has(t));
+  if (validIds.length < 2 && poolList.length >= 2) {
+    for (const p of poolList) {
+      if (!validIds.includes(p.ticker)) validIds.push(p.ticker);
+      if (validIds.length >= 3) break;
+    }
+    compareIds = validIds;
+  }
+
+  const slotCount = 3;
+  selWrap.innerHTML = Array.from({ length: slotCount }, (_, idx) => {
+    const cur = compareIds[idx] || '';
+    return `
+      <div class="compare-slot">
+        <label class="text-xs text-muted" for="cmpSlot${idx}">Emiten ${idx + 1}${idx === 2 ? ' (Opsional)' : ''}</label>
+        <select id="cmpSlot${idx}" data-cmpslot="${idx}" class="compare-select">
+          ${idx === 2 ? '<option value="">— Tidak Dipakai (2 Saham) —</option>' : ''}
+          ${optionsHtml}
+        </select>
+      </div>`;
+  }).join('');
+
+  for (let idx = 0; idx < slotCount; idx++) {
+    const sel = document.getElementById(`cmpSlot${idx}`);
+    if (sel) sel.value = compareIds[idx] || '';
+  }
+
+  const selectedStocks = compareIds.map((t) => poolMap.get(t)).filter(Boolean);
+  const cnt = document.getElementById('compareTabCount');
+  if (cnt) cnt.textContent = String(selectedStocks.length);
+
+  if (selectedStocks.length < 2) {
+    winWrap.innerHTML = '';
+    matWrap.innerHTML = '<div class="text-muted center" style="padding:24px">Pilih minimal 2 emiten untuk membandingkan.</div>';
+    return;
+  }
+
+  const cmp = compareStocks(selectedStocks);
+  const { items, winners } = cmp;
+
+  const winCards = [
+    {
+      cls: 'win-value',
+      badge: 'Juara Value & Dividen',
+      w: winners.value,
+      detail: (e) => `MoS ${fmtPct(e.res.mos, 1)} · Div Yield ${fmtPct(e.res.divYield, 1)}`,
+    },
+    {
+      cls: 'win-quality',
+      badge: 'Juara Quality Compounder',
+      w: winners.quality,
+      detail: (e) => `Grade ${e.res.qualityGrade} (${e.res.qualityScore}/100) · ROA ${fmtPct(e.res.dupont.roaImplied, 1)}`,
+    },
+    {
+      cls: 'win-growth',
+      badge: 'Juara Growth / GARP',
+      w: winners.growth,
+      detail: (e) =>
+        `Return 5Y ${e.res.expectedReturn5Y?.totalCagr5Y !== null && e.res.expectedReturn5Y?.totalCagr5Y !== undefined ? fmtPct(e.res.expectedReturn5Y.totalCagr5Y, 1) : '-'}/thn · PEGY ${e.res.pegy > 0 ? e.res.pegy.toFixed(2) + 'x' : '-'}`,
+    },
+  ];
+
+  winWrap.innerHTML = winCards
+    .map(
+      (c) => `
+      <div class="compare-winner-card ${c.cls}">
+        <div class="compare-winner-badge">${c.badge}</div>
+        <div class="compare-winner-ticker">${renderTickerLogoHtml(c.w.ticker, 26)} <strong>${c.w.ticker}</strong></div>
+        <div class="compare-winner-sub tabular-nums">${c.detail(c.w.entry)}</div>
+      </div>`
+    )
+    .join('');
+
+  const rowsDef = [
+    {
+      label: 'Harga Pasar vs Harga Wajar',
+      best: 'max',
+      val: (x) => x.res.mos,
+      fmt: (x) => `${fmtRp(x.stock.price)} → ${fmtRp(x.res.fvFinal)}`,
+    },
+    {
+      label: 'Margin of Safety (Diskon)',
+      best: 'max',
+      val: (x) => x.res.mos,
+      fmt: (x) => fmtPct(x.res.mos, 1),
+    },
+    {
+      label: 'Expected Total Return 5Y',
+      best: 'max',
+      val: (x) => x.res.expectedReturn5Y?.totalCagr5Y ?? -999,
+      fmt: (x) =>
+        x.res.expectedReturn5Y?.totalCagr5Y !== null && x.res.expectedReturn5Y?.totalCagr5Y !== undefined
+          ? `${fmtPct(x.res.expectedReturn5Y.totalCagr5Y, 1)}/thn`
+          : '-',
+    },
+    {
+      label: 'Implied Growth Pasar vs SGR',
+      best: 'max',
+      val: (x) => (x.res.impliedG1 !== null ? x.res.sgr - x.res.impliedG1 : -999),
+      fmt: (x) =>
+        `${x.res.impliedG1 !== null ? fmtPct(x.res.impliedG1, 1) : '-'} vs ${fmtPct(x.res.sgr, 1)}`,
+    },
+    {
+      label: 'Kualitas Bisnis & DuPont ROA',
+      best: 'max',
+      val: (x) => x.res.qualityScore,
+      fmt: (x) => `Grade ${x.res.qualityGrade} (${x.res.qualityScore}) · ROA ${fmtPct(x.res.dupont.roaImplied, 1)}`,
+    },
+    {
+      label: 'PEGY Peter Lynch (GARP)',
+      best: 'minPos',
+      val: (x) => (x.res.pegy > 0 ? x.res.pegy : Infinity),
+      fmt: (x) => (x.res.pegy > 0 ? `${x.res.pegy.toFixed(2)}x` : '-'),
+    },
+    {
+      label: 'Dividend Yield & Payout',
+      best: 'max',
+      val: (x) => x.res.divYield,
+      fmt: (x) => `${fmtPct(x.res.divYield, 1)} (PR ${fmtPct(x.res.payoutRatio, 0)})`,
+    },
+    {
+      label: 'Arus Kas (OCF / Laba Bersih)',
+      best: 'max',
+      val: (x) => x.res.cashQuality.ocfConversion ?? -999,
+      fmt: (x) =>
+        x.res.cashQuality.ocfConversion !== null
+          ? `${(x.res.cashQuality.ocfConversion * 100).toFixed(0)}%`
+          : 'Opsional',
+    },
+  ];
+
+  const headerCells = items
+    .map(
+      ({ stock }) => `
+      <div class="cmp-col-head">
+        ${renderTickerLogoHtml(stock.ticker, 22)}
+        <strong>${stock.ticker}</strong>
+      </div>`
+    )
+    .join('');
+
+  const bodyRows = rowsDef
+    .map((row) => {
+      const vals = items.map((x) => row.val(x));
+      let bestVal = null;
+      if (row.best === 'max') {
+        const finite = vals.filter((v) => Number.isFinite(v) && v > -900);
+        if (finite.length) bestVal = Math.max(...finite);
+      } else if (row.best === 'minPos') {
+        const pos = vals.filter((v) => Number.isFinite(v) && v > 0 && v < Infinity);
+        if (pos.length) bestVal = Math.min(...pos);
+      }
+      const cells = items
+        .map((x, idx) => {
+          const isWinner = bestVal !== null && Math.abs(vals[idx] - bestVal) < 1e-6;
+          return `
+            <div class="cmp-cell ${isWinner ? 'is-win' : ''}">
+              <span class="cmp-cell-ticker">${x.stock.ticker}</span>
+              <span class="cmp-cell-val tabular-nums">${row.fmt(x)}</span>
+              ${isWinner ? '<span class="cmp-win-tag">&#9733; Unggul</span>' : ''}
+            </div>`;
+        })
+        .join('');
+
+      return `
+        <div class="cmp-row cols-${items.length}">
+          <div class="cmp-row-label">${row.label}</div>
+          <div class="cmp-row-cells">${cells}</div>
+        </div>`;
+    })
+    .join('');
+
+  matWrap.innerHTML = `
+    <div class="cmp-matrix cols-${items.length}">
+      <div class="cmp-head-row cols-${items.length}">
+        <div class="cmp-head-label">Metrik Evaluasi</div>
+        <div class="cmp-head-cols">${headerCells}</div>
+      </div>
+      ${bodyRows}
+    </div>`;
+}
+
 function renderWatchlistOut() {
   const restoreBtn = document.getElementById('btnRestorePresets');
   if (hiddenPresetIds.length > 0) {
@@ -891,6 +1213,11 @@ function renderWatchlistOut() {
   combined.sort((a, b) => {
     if (a.isFav !== b.isFav) return a.isFav ? -1 : 1;
     if (sortBy === 'mosDesc') return b.r.mos - a.r.mos;
+    if (sortBy === 'ret5yDesc') {
+      const ra = a.r.expectedReturn5Y?.totalCagr5Y ?? -999;
+      const rb = b.r.expectedReturn5Y?.totalCagr5Y ?? -999;
+      return rb - ra;
+    }
     if (sortBy === 'qualityDesc') return b.r.qualityScore - a.r.qualityScore;
     if (sortBy === 'drAsc') return a.r.dr - b.r.dr;
     return a.item.ticker.localeCompare(b.item.ticker);
@@ -899,6 +1226,7 @@ function renderWatchlistOut() {
   if (!combined.length) {
     document.getElementById('watchlistTbody').innerHTML =
       '<tr><td colspan="9" class="center text-muted" style="padding:24px">Tidak ada emiten pada filter ini.</td></tr>';
+    syncCompareFloatingBar();
     return;
   }
 
@@ -912,6 +1240,7 @@ function renderWatchlistOut() {
           ? 'amber'
           : 'rose';
       const isCur = item.id === state.id;
+      const inCmp = compareIds.includes(item.ticker);
       return `
         <tr class="wl-row ${isCur ? 'is-current' : ''}" style="cursor:pointer" data-loadid="${item.id}" data-iscustom="${item.isCustom}">
           <td class="wl-col-ticker">
@@ -940,6 +1269,7 @@ function renderWatchlistOut() {
           <td class="num tabular-nums font-bold wl-col-mos" data-label="MoS" style="color:${mosColor}">${(r.mos * 100).toFixed(1)}%</td>
           <td class="center wl-col-actions">
             <div class="action-group">
+              <button type="button" class="btn-icon-sm vs-btn ${inCmp ? 'active' : ''}" data-vsticker="${item.ticker}" title="Pilih untuk Bandingkan (maks 3)">VS</button>
               <button type="button" class="btn-icon-sm fav-btn ${isFav ? 'active' : ''}" data-favticker="${item.ticker}" title="Favorit">&#9733;</button>
               <button type="button" class="btn-icon-sm" data-editid="${item.id}" data-iscustom="${item.isCustom}" title="Edit Data">&#9998;</button>
               <button type="button" class="btn-icon-sm del-btn" data-delid="${item.id}" data-iscustom="${item.isCustom}" data-delticker="${item.ticker}" title="Hapus dari Watchlist">&#128465;</button>
@@ -948,6 +1278,7 @@ function renderWatchlistOut() {
         </tr>`;
     })
     .join('');
+  syncCompareFloatingBar();
 }
 
 // =========================================================================
@@ -980,6 +1311,7 @@ function setStep(step, { scroll = false } = {}) {
   document.querySelectorAll('.step-view').forEach((v) => {
     v.classList.toggle('hidden', v.id !== 'view-' + step);
   });
+  syncCompareFloatingBar();
   if (scroll && window.innerWidth <= 768) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -1238,6 +1570,20 @@ document.getElementById('inpBvps').addEventListener('input', (e) => {
   state.bvps = parseFloat(e.target.value) || 0;
   renderAll();
 });
+document.getElementById('chkBankMode').addEventListener('change', (e) => {
+  state.isBankMode = e.target.checked;
+  renderAll();
+});
+document.getElementById('inpOcf').addEventListener('input', (e) => {
+  const raw = e.target.value.trim();
+  state.ocf = raw === '' ? null : parseFloat(raw) || 0;
+  renderAll();
+});
+document.getElementById('inpFcf').addEventListener('input', (e) => {
+  const raw = e.target.value.trim();
+  state.fcf = raw === '' ? null : parseFloat(raw) || 0;
+  renderAll();
+});
 
 const bindSliderPair = (rngId, inpId, key, scale = 100) => {
   const rng = document.getElementById(rngId);
@@ -1332,6 +1678,36 @@ document.getElementById('selProjRows').addEventListener('change', () => renderAl
 document.getElementById('selMatrixMetric').addEventListener('change', () => renderAll());
 document.getElementById('selSortWatchlist').addEventListener('change', () => renderAll());
 
+// Compare Tab Events
+document.getElementById('compareSelectors')?.addEventListener('change', (e) => {
+  const sel = e.target.closest('select[data-cmpslot]');
+  if (!sel) return;
+  const idx = Number(sel.dataset.cmpslot);
+  const val = sel.value;
+  const next = [...compareIds];
+  if (val) next[idx] = val;
+  else next.splice(idx, 1);
+  compareIds = [...new Set(next.filter(Boolean))].slice(0, 3);
+  renderCompareOut();
+  renderWatchlistOut();
+});
+
+document.getElementById('btnCompareSyncActive')?.addEventListener('click', () => {
+  const t = (state.ticker || '').toUpperCase();
+  if (!t) return;
+  if (!compareIds.includes(t)) {
+    compareIds = [t, ...compareIds].slice(0, 3);
+    renderCompareOut();
+    renderWatchlistOut();
+    showToast(`${t} dimasukkan ke perbandingan`);
+  }
+});
+
+document.getElementById('btnGoCompare')?.addEventListener('click', () => {
+  setStep('step3', { scroll: true });
+  setOutTab('compare');
+});
+
 document.querySelectorAll('.filter-pill').forEach((btn) =>
   btn.addEventListener('click', () => {
     watchlistFilter = btn.dataset.wfilter;
@@ -1348,6 +1724,27 @@ document.getElementById('btnRestorePresets').addEventListener('click', () => {
 });
 
 document.getElementById('watchlistTbody').addEventListener('click', (e) => {
+  const vsBtn = e.target.closest('[data-vsticker]');
+  if (vsBtn) {
+    e.stopPropagation();
+    const t = vsBtn.dataset.vsticker;
+    if (compareIds.includes(t)) {
+      if (compareIds.length <= 2) {
+        return showToast('Minimal 2 saham dipertahankan untuk perbandingan');
+      }
+      compareIds = compareIds.filter((x) => x !== t);
+    } else {
+      if (compareIds.length >= 3) {
+        compareIds = [...compareIds.slice(1), t];
+      } else {
+        compareIds.push(t);
+      }
+    }
+    renderCompareOut();
+    renderWatchlistOut();
+    return;
+  }
+
   const favBtn = e.target.closest('[data-favticker]');
   if (favBtn) {
     e.stopPropagation();
@@ -1543,6 +1940,8 @@ function renderAiPreview(result) {
   if (d.der !== null) chips.push(`DER: <strong>${d.der.toFixed(2)}x</strong>`);
   if (d.epsTTM !== null) chips.push(`EPS TTM: <strong>${fmtRp(d.epsTTM)}</strong>`);
   if (d.bvps !== null) chips.push(`BVPS: <strong>${fmtRp(d.bvps)}</strong>`);
+  if (d.ocf !== null && d.ocf !== undefined) chips.push(`OCF: <strong>${fmtNum(d.ocf, 0)} M</strong>`);
+  if (d.fcf !== null && d.fcf !== undefined) chips.push(`FCF: <strong>${fmtNum(d.fcf, 0)} M</strong>`);
   document.getElementById('aiRatioChips').innerHTML = chips.map((c) => `<span class="chip">${c}</span>`).join('');
 
   if (d.history && d.history.length) {
@@ -1607,6 +2006,8 @@ document.getElementById('btnApplyAiData').addEventListener('click', () => {
   if (d.der !== null) state.der = d.der;
   if (d.epsTTM !== null) state.epsTTM = d.epsTTM;
   if (d.bvps !== null) state.bvps = d.bvps;
+  if (d.ocf !== null && d.ocf !== undefined) state.ocf = d.ocf;
+  if (d.fcf !== null && d.fcf !== undefined) state.fcf = d.fcf;
   if (d.pe3) state.pe3 = d.pe3;
   if (d.pe5) state.pe5 = d.pe5;
   if (d.pe10) state.pe10 = d.pe10;

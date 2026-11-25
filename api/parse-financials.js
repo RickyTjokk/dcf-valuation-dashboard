@@ -28,6 +28,8 @@ const RESPONSE_SCHEMA = {
     pbv3: { type: 'NUMBER', nullable: true },
     pbv5: { type: 'NUMBER', nullable: true },
     pbv10: { type: 'NUMBER', nullable: true },
+    ocfBillion: { type: 'NUMBER', nullable: true },
+    fcfBillion: { type: 'NUMBER', nullable: true },
     history: {
       type: 'ARRAY',
       items: {
@@ -63,7 +65,7 @@ ATURAN WAJIB:
 4. Konversi rasio:
    - "roeDecimal" dan "npmDecimal" HARUS dalam bentuk desimal (contoh: 26.5% -> 0.265; jika tertulis 26.5 tanpa % dan konteksnya ROE/NPM persen -> 0.265).
    - "derRatio" HARUS dalam rasio x (contoh: 0.63x -> 0.63; jika tertulis dalam persen seperti 63% -> 0.63 dan catat di "warnings").
-5. Jika ada angka harga saham (price dalam Rp), Market Cap (marketCapTrillion dalam Trilyun Rp), EPS TTM (epsTTM dalam Rp), BVPS (bvps dalam Rp), atau rata-rata PE/PBV 3Y/5Y/10Y, ekstrak juga. Jika tidak ada, isi null.
+5. Jika ada angka harga saham (price dalam Rp), Market Cap (marketCapTrillion dalam Trilyun Rp), EPS TTM (epsTTM dalam Rp), BVPS (bvps dalam Rp), rata-rata PE/PBV 3Y/5Y/10Y, atau Operating Cash Flow ("ocfBillion" dalam Milyar Rp) / Free Cash Flow ("fcfBillion" dalam Milyar Rp), ekstrak juga. Jika tidak ada, isi null.
 6. Jangan pernah mengarang angka yang tidak ada di input.`;
 
 async function callGemini(model, apiKey, parts) {

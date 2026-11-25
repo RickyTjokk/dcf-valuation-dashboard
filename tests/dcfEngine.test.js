@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { computeDCF } from '../src/engine/dcfEngine.js';
+import { computeDCF, compareStocks } from '../src/engine/dcfEngine.js';
 import { PRESETS } from '../src/data/presets15.js';
 
 const EXPECTED = {
@@ -119,6 +119,43 @@ test('V6: Peter Lynch PEGY, Fair Value with 25% growth cap, categories, and incl
   assert.ok(resOn.scenarios.bull.fv > resOn.scenarios.base.fv);
   assert.ok(resOn.scenarios.base.fv > resOn.scenarios.bear.fv);
 });
+
+test('V11: Reverse DCF (impliedG1), SGR, Expected Return 5Y, DuPont, Bank Mode, Cash Quality, and compareStocks', () => {
+  const bbri = PRESETS.find((p) => p.ticker === 'BBRI');
+  const bbca = PRESETS.find((p) => p.ticker === 'BBCA');
+  const cmry = PRESETS.find((p) => p.ticker === 'CMRY');
+
+  // 1. Reverse DCF: plugging impliedG1 back into computeDCF should yield iv ≈ price
+  const cmryRes = computeDCF(cmry);
+  assert.ok(cmryRes.impliedG1 !== null && Number.isFinite(cmryRes.impliedG1));
+  const checkRev = computeDCF({ ...cmry, g1: cmryRes.impliedG1 });
+  assert.ok(Math.abs(checkRev.iv - cmry.price) < 5, `Expected IV ${checkRev.iv} ≈ price ${cmry.price}`);
+
+  // 2. SGR & Expected Return 5Y
+  assert.ok(cmryRes.sgr > 0.1 && cmryRes.sgr <= cmry.roe);
+  assert.ok(cmryRes.expectedReturn5Y && Number.isFinite(cmryRes.expectedReturn5Y.totalCagr5Y));
+  assert.ok(cmryRes.expectedReturn5Y.totalCagr5Y > 0.1);
+
+  // 3. Bank Mode DER threshold relief vs default parity
+  const bbcaDefault = computeDCF(bbca);
+  const bbcaBank = computeDCF({ ...bbca, isBankMode: true });
+  assert.ok(bbcaBank.dr < bbcaDefault.dr, 'Bank mode should lower DER risk penalty for BBCA (DER 10x)');
+  assert.strictEqual(bbcaDefault.dupont.isBankMode, false);
+  assert.strictEqual(bbcaBank.dupont.isBankMode, true);
+
+  // 4. Optional OCF / FCF Cash Quality
+  const cmryCash = computeDCF({ ...cmry, ocf: 1700, fcf: 1400 });
+  assert.ok(cmryCash.cashQuality.ocfConversion > 1.0);
+  assert.strictEqual(cmryCash.cashQuality.status.tone, 'emerald');
+
+  // 5. compareStocks returns 3 style winners
+  const cmp = compareStocks([bbri, bbca, cmry]);
+  assert.equal(cmp.items.length, 3);
+  assert.ok(cmp.winners.value?.ticker);
+  assert.ok(cmp.winners.quality?.ticker);
+  assert.ok(cmp.winners.growth?.ticker);
+});
+
 
 
 

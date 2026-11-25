@@ -393,6 +393,35 @@
                   <strong id="metaEpsBase" class="tabular-nums">-</strong>
                 </div>
               </div>
+
+              <!-- Mode Sektor Bank + DuPont ROE Strip -->
+              <label class="toggle-box" style="padding:8px 10px">
+                <div>
+                  <div class="font-semibold" style="font-size:12.5px">Mode Sektor Bank (Skala DER Perbankan)</div>
+                  <div class="text-muted text-xs">Aktifkan untuk bank agar DER tinggi dari dana nasabah tidak kena penalti Beta.</div>
+                </div>
+                <input id="chkBankMode" type="checkbox" />
+              </label>
+
+              <div id="dupontStep2Strip" class="dupont-mini-strip"></div>
+
+              <!-- Optional OCF / FCF Cash Quality -->
+              <details class="cash-details">
+                <summary class="cash-summary">
+                  <span>Cek Arus Kas Tunai (OCF / FCF Opsional)</span>
+                  <span id="dispCashConvBadge" class="mini-badge muted">Opsional</span>
+                </summary>
+                <div class="two-fields mt-2">
+                  <div class="field">
+                    <label for="inpOcf">OCF / Arus Kas Operasi (Milyar)</label>
+                    <input id="inpOcf" type="number" step="any" placeholder="Kosong = skip" class="tabular-nums" />
+                  </div>
+                  <div class="field">
+                    <label for="inpFcf">FCF / Free Cash Flow (Milyar)</label>
+                    <input id="inpFcf" type="number" step="any" placeholder="Kosong = skip" class="tabular-nums" />
+                  </div>
+                </div>
+              </details>
             </div>
           </div>
 
@@ -405,9 +434,10 @@
               </div>
             </div>
             <div class="form-stack">
-              <!-- Patokan CAGR + 3 Preset Asumsi Cepat -->
+              <!-- Patokan CAGR + 4-Way Growth Sanity + 3 Preset Asumsi Cepat -->
               <div class="cagr-helper">
                 <div id="cagrGuideText" class="text-xs text-muted mb-2">Patokan CAGR historis: -</div>
+                <div id="step2GrowthSanity" class="growth-sanity-mini mb-2"></div>
                 <div class="seg-group full-width">
                   <button type="button" data-gpreset="conservative" class="gpreset-btn">Konservatif</button>
                   <button type="button" data-gpreset="moderate" class="gpreset-btn">Moderat</button>
@@ -612,6 +642,7 @@
             <button type="button" class="out-tab" data-outtab="beta">Fundamental Beta &amp; Risiko</button>
             <button type="button" class="out-tab" data-outtab="projection">Proyeksi DCF 100 Tahun</button>
             <button type="button" class="out-tab" data-outtab="matrix">Matriks Sensitivitas 5&times;5</button>
+            <button type="button" class="out-tab" data-outtab="compare">Bandingkan (<span id="compareTabCount">3</span>)</button>
           </div>
           <button type="button" class="btn btn-ghost btn-sm next-step-btn" data-goto="step2">Ubah Asumsi</button>
         </div>
@@ -623,6 +654,9 @@
 
           <!-- 3 SCENARIOS: PESIMIS / WAJAR / OPTIMIS -->
           <div class="three-col-grid mb-4" id="scenarioCards"></div>
+
+          <!-- KEDALAMAN FUNDAMENTAL & ESTIMASI RETURN 5Y -->
+          <div class="card mb-4" id="fundamentalDepthCard"></div>
 
           <!-- PROPORTIONAL 2-COLUMN BENTO CHARTS -->
           <div class="bento-grid mb-4">
@@ -803,6 +837,32 @@
             <div id="matrixContainer" class="table-scroll"></div>
           </div>
         </div>
+
+        <!-- OUT 5: BANDINGKAN (HEAD-TO-HEAD 2-3 EMITEN) -->
+        <div id="panel-out-compare" class="out-panel hidden">
+          <div class="card mb-4">
+            <div class="card-header">
+              <div>
+                <h2 class="card-title">Duel Saham Head-to-Head (2–3 Emiten)</h2>
+                <p class="card-desc">Pilih 2–3 emiten untuk mengadu Margin of Safety, Return 5Y, Kualitas DuPont, dan PEGY secara langsung.</p>
+              </div>
+              <button id="btnCompareSyncActive" type="button" class="btn btn-secondary btn-sm">Masukkan Emiten Aktif</button>
+            </div>
+            <div class="compare-selectors" id="compareSelectors"></div>
+          </div>
+
+          <div class="compare-winners-grid mb-4" id="compareWinnersGrid"></div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">Matriks Perbandingan Fundamental &amp; Valuasi</h3>
+                <p class="card-desc">Angka terbaik di setiap metrik ditandai dengan lencana hijau.</p>
+              </div>
+            </div>
+            <div id="compareMatrixContainer"></div>
+          </div>
+        </div>
       </section>
 
       <!-- WATCHLIST TAB -->
@@ -811,13 +871,14 @@
           <div class="card-header">
             <div>
               <h2 class="card-title">Watchlist &amp; Perbandingan Emiten</h2>
-              <p class="card-desc">Klik baris untuk buka analisa, &#9733; untuk favorit, &#9998; untuk edit data, atau hapus emiten yang tidak dipantau.</p>
+              <p class="card-desc">Klik baris untuk buka analisa, <strong>VS</strong> untuk adu 2–3 saham, &#9733; favorit, atau &#9998; edit data.</p>
             </div>
             <div class="btn-group">
               <button id="btnRestorePresets" type="button" class="btn btn-ghost btn-sm hidden">Pulihkan Preset</button>
               <button id="btnRefreshAllWatchlist" type="button" class="btn btn-secondary">Refresh Semua Harga Live</button>
               <select id="selSortWatchlist">
                 <option value="mosDesc">Urutkan: MoS Tertinggi</option>
+                <option value="ret5yDesc">Urutkan: Expected Return 5Y</option>
                 <option value="qualityDesc">Urutkan: Kualitas Terbaik</option>
                 <option value="drAsc">Urutkan: Discount Rate Terendah</option>
                 <option value="tickerAsc">Urutkan: Ticker A–Z</option>
@@ -852,6 +913,12 @@
         </div>
       </section>
     </main>
+  </div>
+
+  <!-- FLOATING COMPARE BAR (WHEN SELECTING FROM WATCHLIST) -->
+  <div id="compareFloatingBar" class="compare-floating-bar hidden">
+    <span id="compareFloatingText" class="text-sm font-semibold">2 saham dipilih</span>
+    <button id="btnGoCompare" type="button" class="btn btn-primary btn-sm">Bandingkan Sekarang &rarr;</button>
   </div>
 
   <!-- MODAL: AI SMART INPUT & JSON BACKUP -->

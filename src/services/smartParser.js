@@ -146,6 +146,8 @@ export function parseFinancialTextLocal(rawText) {
   let marketCapTrillion = null;
   let pe3 = null, pe5 = null, pe10 = null;
   let pbv3 = null, pbv5 = null, pbv10 = null;
+  let ocfBillion = null;
+  let fcfBillion = null;
 
   let activeSection = null;
 
@@ -221,6 +223,21 @@ export function parseFinancialTextLocal(rawText) {
         const hasUnit = /(t|tril|b|mil|m|juta)/i.test(rest);
         marketCapTrillion = hasUnit ? Number((valB / 1000).toFixed(4)) : valB;
       }
+      activeSection = null;
+      continue;
+    }
+
+    if (/^\s*(?:ocf|operating\s*cash\s*flow|arus\s*kas\s*operasi(?:onal)?|cfo)\b/i.test(line)) {
+      const rest = line.replace(/^.*?(?:ocf|operating\s*cash\s*flow|arus\s*kas\s*operasi(?:onal)?|cfo)\s*[:=\-]?\s*/i, '');
+      const nums = extractNumbersFromLine(rest, true);
+      if (nums.length) ocfBillion = nums[0];
+      activeSection = null;
+      continue;
+    }
+    if (/^\s*(?:fcf|free\s*cash\s*flow|arus\s*kas\s*bebas)\b/i.test(line)) {
+      const rest = line.replace(/^.*?(?:fcf|free\s*cash\s*flow|arus\s*kas\s*bebas)\s*[:=\-]?\s*/i, '');
+      const nums = extractNumbersFromLine(rest, true);
+      if (nums.length) fcfBillion = nums[0];
       activeSection = null;
       continue;
     }
@@ -362,6 +379,8 @@ export function parseFinancialTextLocal(rawText) {
     pbv3,
     pbv5,
     pbv10,
+    ocfBillion,
+    fcfBillion,
     history: history.slice(0, 7),
     warnings,
   };
@@ -412,6 +431,8 @@ export function normalizeParsedResult(raw) {
     pbv3: raw.pbv3 > 0 ? Number(raw.pbv3) : null,
     pbv5: raw.pbv5 > 0 ? Number(raw.pbv5) : null,
     pbv10: raw.pbv10 > 0 ? Number(raw.pbv10) : null,
+    ocf: raw.ocfBillion !== null && raw.ocfBillion !== undefined ? Number(raw.ocfBillion) : null,
+    fcf: raw.fcfBillion !== null && raw.fcfBillion !== undefined ? Number(raw.fcfBillion) : null,
     history,
     warnings,
   };
