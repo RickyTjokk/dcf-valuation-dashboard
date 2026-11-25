@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DCF Valuation Lab — Kalkulator Saham Fundamental Beta &amp; 100Y EPS</title>
+  <meta name="description" content="Kalkulator & Dashboard Valuasi Saham IDX interaktif berbasis Fundamental Beta 6 faktor, DCF EPS 100 tahun, Relative Valuation PE/PBV, serta data harga & market cap live." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/src/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+
+    <!-- TOP NAVIGATION BAR -->
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand">
+          <div class="brand-mark">DCF</div>
+          <div class="brand-text">
+            <span class="brand-title">DCF Valuation Lab</span>
+            <span class="brand-sub">Fundamental Beta &bull; 100Y EPS</span>
+          </div>
+        </div>
+
+        <!-- Searchable Stock Selector Pill -->
+        <div class="picker-wrap">
+          <button id="btnPicker" type="button" class="stock-pill" aria-haspopup="listbox" aria-expanded="false">
+            <svg class="icon-sm muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <span id="pillTicker" class="pill-ticker">BBRI</span>
+            <span class="pill-sep">&middot;</span>
+            <span id="pillName" class="pill-name">Bank Rakyat Indonesia</span>
+            <svg class="icon-sm muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+
+          <div id="pickerDropdown" class="picker-dropdown hidden" role="listbox">
+            <div class="picker-search-box">
+              <input id="inpPickerSearch" type="text" placeholder="Cari ticker (mis. BBRI, BBCA) atau ketik ticker baru..." autocomplete="off" />
+            </div>
+            <div id="pickerList" class="picker-list"></div>
+          </div>
+        </div>
+
+        <!-- Live Price Pill -->
+        <div class="live-pill-group">
+          <div id="liveBadge" class="live-pill">
+            <span id="liveDot" class="live-dot"></span>
+            <span id="livePriceText" class="tabular-nums font-bold">Rp 3.100</span>
+            <span id="liveSourceText" class="live-src">Preset</span>
+          </div>
+          <button id="btnRefreshLive" type="button" class="icon-btn" title="Ambil Harga & Market Cap Live IDX" aria-label="Refresh Harga Live">
+            <svg id="refreshIcon" class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+          </button>
+          <button id="btnLiveSettings" type="button" class="icon-btn" title="Pengaturan Sumber Data Live (Yahoo .JK / Google Finance)" aria-label="Pengaturan Live Data">
+            <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </button>
+        </div>
+
+        <div class="topbar-actions">
+          <button id="btnTheme" type="button" class="icon-btn" title="Ganti Tema Terang / Gelap" aria-label="Ganti Tema">
+            <svg id="themeIcon" class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+          </button>
+          <button id="btnSaveWatchlist" type="button" class="btn btn-secondary">Simpan</button>
+          <button id="btnNewStock" type="button" class="btn btn-primary">+ Tambah Emiten</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- 3-STEP WORKFLOW STEPPER + WATCHLIST -->
+    <nav class="stepper-bar" aria-label="Alur Kerja Valuasi">
+      <div class="stepper-list">
+        <button type="button" class="step-btn active" data-step="step1">
+          <span class="step-num">1</span>
+          <span class="step-label">Data Keuangan</span>
+        </button>
+        <span class="step-arrow" aria-hidden="true">&rarr;</span>
+        <button type="button" class="step-btn" data-step="step2">
+          <span class="step-num">2</span>
+          <span class="step-label">Risiko &amp; Asumsi</span>
+        </button>
+        <span class="step-arrow" aria-hidden="true">&rarr;</span>
+        <button type="button" class="step-btn" data-step="step3">
+          <span class="step-num">3</span>
+          <span class="step-label">Hasil &amp; Analisa</span>
+        </button>
+        <button type="button" class="step-btn step-watchlist" data-step="watchlist">
+          <span class="step-star">&#9733;</span>
+          <span class="step-label">Watchlist (15+)</span>
+        </button>
+      </div>
+      <div class="stepper-utils">
+        <button id="btnPasteModal" type="button" class="btn btn-ghost">Tempel Excel / JSON</button>
+        <button id="btnReset" type="button" class="btn btn-ghost">Reset</button>
+      </div>
+    </nav>
+
+    <!-- HERO VALUATION VERDICT BANNER (ALWAYS VISIBLE) -->
+    <section class="hero-card" aria-label="Ringkasan Valuasi Utama">
+      <div class="hero-grid">
+        <div class="hero-col-main">
+          <div class="eyebrow">Final Valuation <span id="heroMethodHint" class="hint-chip">DCF + Relative</span></div>
+          <div id="kpiFV" class="hero-value tabular-nums">Rp 5.049</div>
+          <div id="kpiFVSub" class="hero-sub tabular-nums">Intrinsic: Rp 5.518 &middot; Relative: Rp 4.580</div>
+        </div>
+
+        <div class="hero-col-mos">
+          <div class="eyebrow">Margin of Safety</div>
+          <div class="mos-row">
+            <span id="kpiMoS" class="mos-value tabular-nums">38.6%</span>
+            <span id="kpiStatusPill" class="status-badge">UNDERVALUED</span>
+          </div>
+          <div id="kpiDRSub" class="hero-sub tabular-nums">Beta Final: 1.02 &middot; Discount Rate: 12.11%</div>
+        </div>
+
+        <div class="hero-col-gauge">
+          <div class="gauge-header">
+            <span class="eyebrow">Posisi Harga vs Nilai Wajar</span>
+            <span id="upsideLabel" class="upside-text tabular-nums">+62.9% Upside</span>
+          </div>
+          <div id="heroGaugeBar" class="mini-gauge-wrap"></div>
+        </div>
+
+        <div class="hero-col-pills">
+          <div class="eyebrow">Target Beli (Zona MoS)</div>
+          <div id="heroBuyPills" class="buy-pills tabular-nums"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- MAIN STEP VIEWS -->
+    <main class="main-content">
+
+      <!-- STEP 1: DATA KEUANGAN -->
+      <section id="view-step1" class="step-view">
+        <div class="card mb-4">
+          <div class="card-header">
+            <div>
+              <h1 class="card-title">Identitas &amp; Data Pasar Emiten</h1>
+              <p class="card-desc">Ketik kode ticker lalu klik tombol refresh di atas untuk mengambil harga &amp; market cap live, atau isi manual.</p>
+            </div>
+            <button type="button" class="btn btn-secondary next-step-btn" data-goto="step2">Lanjut: Risiko &amp; Asumsi &rarr;</button>
+          </div>
+          <div class="meta-grid">
+            <div class="field">
+              <label for="inpTicker">Ticker IDX</label>
+              <div class="input-with-btn">
+                <input id="inpTicker" type="text" maxlength="8" class="uppercase font-bold" />
+                <button id="btnInlineFetch" type="button" class="btn btn-secondary btn-sm">Cek Live</button>
+              </div>
+            </div>
+            <div class="field">
+              <label for="inpName">Nama Perusahaan</label>
+              <input id="inpName" type="text" />
+            </div>
+            <div class="field">
+              <label for="inpPrice">Harga Saham (Rp)</label>
+              <input id="inpPrice" type="number" step="any" min="1" class="tabular-nums" />
+            </div>
+            <div class="field">
+              <label for="inpMcap">Market Cap (Trilyun Rp)</label>
+              <input id="inpMcap" type="number" step="any" min="0.01" class="tabular-nums" />
+            </div>
+            <div class="field">
+              <div class="label-row">
+                <label for="inpShares">Lembar Saham (Milyar)</label>
+                <label class="inline-check"><input id="chkSharesManual" type="checkbox" /> Manual</label>
+              </div>
+              <input id="inpShares" type="number" step="any" min="0.001" class="tabular-nums" />
+            </div>
+          </div>
+        </div>
+
+        <div class="two-col-wide">
+          <!-- Historical Input Table -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2 class="card-title">Laporan Laba Rugi 4–7 Tahun (Milyar Rp)</h2>
+                <p class="card-desc">Masukkan tahun terbaru di baris paling atas. Kamu juga bisa menempel langsung dari Excel/Sheets.</p>
+              </div>
+              <div class="btn-group">
+                <button id="btnAddYear" type="button" class="btn btn-secondary btn-sm">+ Tahun</button>
+                <button id="btnRemYear" type="button" class="btn btn-ghost btn-sm">- Tahun</button>
+              </div>
+            </div>
+
+            <div class="table-scroll">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Tahun</th>
+                    <th class="num">Penjualan</th>
+                    <th class="num">Laba Usaha</th>
+                    <th class="num">Laba Bersih</th>
+                    <th class="num">Faktor Inflasi</th>
+                    <th class="num">OPM</th>
+                  </tr>
+                </thead>
+                <tbody id="historyTbody"></tbody>
+              </table>
+            </div>
+
+            <div class="table-footer-bar">
+              <span>Cakupan rata-rata Laba &amp; OPM:</span>
+              <select id="selAvgYears">
+                <option value="all">Semua tahun di tabel</option>
+                <option value="4">4 tahun terbaru</option>
+                <option value="5">5 tahun terbaru</option>
+                <option value="6">6 tahun terbaru</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Auto-Computed Historical Insights -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2 class="card-title">Ringkasan Statistik Otomatis</h2>
+                <p class="card-desc">Dihitung otomatis dari data historis untuk menentukan normalisasi EPS dan risiko Beta.</p>
+              </div>
+            </div>
+            <div class="stat-cards-grid">
+              <div class="stat-box">
+                <div class="stat-label">Laba Bersih Avg (Cyclically Adj.)</div>
+                <div id="statNiAvg" class="stat-val tabular-nums">-</div>
+                <div class="stat-note">Rata-rata laba setelah penyesuaian inflasi</div>
+              </div>
+              <div class="stat-box">
+                <div class="stat-label">Predictability Laba (R)</div>
+                <div id="statR" class="stat-val tabular-nums">-</div>
+                <div class="stat-note">Korelasi pertumbuhan laba (1.0 = sangat konsisten)</div>
+              </div>
+              <div class="stat-box">
+                <div class="stat-label">Stabilitas Margin (COV OPM)</div>
+                <div id="statCov" class="stat-val tabular-nums">-</div>
+                <div class="stat-note">Std OPM / Avg OPM (semakin kecil semakin stabil)</div>
+              </div>
+              <div class="stat-box">
+                <div class="stat-label">Rata-rata OPM</div>
+                <div id="statAvgOpm" class="stat-val tabular-nums">-</div>
+                <div class="stat-note">Efisiensi laba operasional rata-rata</div>
+              </div>
+              <div class="stat-box">
+                <div class="stat-label">Standar Deviasi OPM</div>
+                <div id="statStdOpm" class="stat-val tabular-nums">-</div>
+                <div class="stat-note">Volatilitas margin operasional antar tahun</div>
+              </div>
+              <div class="stat-box">
+                <div class="stat-label">CAGR Laba Bersih</div>
+                <div id="statCagr" class="stat-val tabular-nums">-</div>
+                <div class="stat-note">Laju pertumbuhan tahunan historis</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- STEP 2: RISIKO & ASUMSI -->
+      <section id="view-step2" class="step-view hidden">
+        <div class="three-col-grid">
+          <!-- Card 1: Rasio Keuangan -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2 class="card-title">Rasio Fundamental &amp; EPS</h2>
+                <p class="card-desc">Digunakan untuk menghitung Beta Fundamental dan basis laba per saham.</p>
+              </div>
+            </div>
+            <div class="form-stack">
+              <div class="two-fields">
+                <div class="field">
+                  <label for="inpRoe">ROE (%) <span class="tip" title="Return on Equity: >25% mendapat Beta terbaik (0.33)">?</span></label>
+                  <input id="inpRoe" type="number" step="0.01" class="tabular-nums" />
+                </div>
+                <div class="field">
+                  <label for="inpDer">DER (x) <span class="tip" title="Debt to Equity Ratio: <0.10x mendapat Beta terbaik (0.33)">?</span></label>
+                  <input id="inpDer" type="number" step="0.01" min="0" class="tabular-nums" />
+                </div>
+              </div>
+              <div class="two-fields">
+                <div class="field">
+                  <label for="inpNpm">NPM (%) <span class="tip" title="Net Profit Margin: >25% mendapat Beta terbaik (0.33)">?</span></label>
+                  <input id="inpNpm" type="number" step="0.01" class="tabular-nums" />
+                </div>
+                <div class="field">
+                  <label for="inpBvps">Ekuitas / Lembar (BVPS)</label>
+                  <input id="inpBvps" type="number" step="0.01" class="tabular-nums" />
+                </div>
+              </div>
+              <div class="two-fields">
+                <div class="field">
+                  <label for="inpEpsTtm">EPS TTM (Rp)</label>
+                  <input id="inpEpsTtm" type="number" step="0.01" class="tabular-nums" />
+                </div>
+                <div class="stat-box compact">
+                  <div class="stat-label">EPS Cyclically Adj.</div>
+                  <div id="dispEpsAdj" class="stat-val tabular-nums">-</div>
+                </div>
+              </div>
+              <div class="field">
+                <label for="selEpsBasis">Basis Cash Flow / EPS Awal (C27)</label>
+                <select id="selEpsBasis">
+                  <option value="avg">Rata-rata (EPS Cyclically Adj. + EPS TTM)</option>
+                  <option value="ttm">EPS TTM Saja</option>
+                  <option value="adj">EPS Cyclically Adj. Saja</option>
+                </select>
+              </div>
+              <div class="stat-box compact highlight">
+                <div class="label-row">
+                  <span class="stat-label">EPS Dasar yang Dipakai Proyeksi</span>
+                  <strong id="metaEpsBase" class="tabular-nums">-</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 2: Asumsi DCF & Discount Rate -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2 class="card-title">Asumsi Pertumbuhan &amp; Discount</h2>
+                <p class="card-desc">Geser slider untuk melihat dampak langsung ke Intrinsic Value dan Margin of Safety.</p>
+              </div>
+            </div>
+            <div class="form-stack">
+              <div class="slider-field">
+                <div class="label-row">
+                  <label for="rngG1">Growth 0–10 Tahun (%)</label>
+                  <div class="inline-num"><input id="inpG1" type="number" step="0.5" min="-10" max="40" class="tabular-nums" /><span>%</span></div>
+                </div>
+                <input id="rngG1" type="range" min="0" max="30" step="0.5" />
+              </div>
+
+              <div class="slider-field">
+                <div class="label-row">
+                  <label for="rngG2">Growth Setelah 10 Tahun (%)</label>
+                  <div class="inline-num"><input id="inpG2" type="number" step="0.5" min="0" max="15" class="tabular-nums" /><span>%</span></div>
+                </div>
+                <input id="rngG2" type="range" min="0" max="10" step="0.5" />
+              </div>
+
+              <div class="slider-field">
+                <div class="label-row">
+                  <label for="rngBetaAdj">Beta Adjustment <span class="tip" title="Penyesuaian subjektif/kualitatif terhadap Beta rata-rata (mis. -0.2 untuk bluechip sangat defensif)">?</span></label>
+                  <input id="inpBetaAdj" type="number" step="0.05" min="-1" max="1" class="inline-single tabular-nums" />
+                </div>
+                <input id="rngBetaAdj" type="range" min="-0.5" max="0.5" step="0.05" />
+              </div>
+
+              <div class="two-fields">
+                <div class="field">
+                  <label for="inpRf">10-Y Bond Rf (%)</label>
+                  <input id="inpRf" type="number" step="0.1" class="tabular-nums" />
+                </div>
+                <div class="field">
+                  <label for="inpRm">IHSG Return Rm (%)</label>
+                  <input id="inpRm" type="number" step="0.1" class="tabular-nums" />
+                </div>
+              </div>
+
+              <div class="field">
+                <label for="selY1Mode">Pola Proyeksi Tahun Awal (Y1–Y3)</label>
+                <select id="selY1Mode">
+                  <option value="normal">Normal — Tahun 1 langsung tumbuh (1+g)^1</option>
+                  <option value="flat1">Flat Tahun 1 — Y1 = 1.0x EPS, lalu Y2..10 tumbuh</option>
+                  <option value="recovery">Recovery Multiplier — Diskon laba Y1/Y2</option>
+                </select>
+                <div id="recoveryBox" class="two-fields mt-2 hidden">
+                  <div class="field">
+                    <label for="inpY1Mult">Multiplier Y1</label>
+                    <input id="inpY1Mult" type="number" step="0.05" min="0" max="2" class="tabular-nums" />
+                  </div>
+                  <div class="field">
+                    <label for="inpY2Mult">Multiplier Y2</label>
+                    <input id="inpY2Mult" type="number" step="0.05" min="0" max="2" class="tabular-nums" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 3: Relative Valuation -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2 class="card-title">Relative Valuation (PE &amp; PBV)</h2>
+                <p class="card-desc">Mengambil persentil dari valuasi historis PE dan PBV 3Y/5Y/10Y.</p>
+              </div>
+            </div>
+            <div class="form-stack">
+              <label class="toggle-box">
+                <div>
+                  <div class="font-semibold">Gabungkan ke Final Valuation</div>
+                  <div class="text-muted text-xs">Matikan jika ingin pakai DCF Intrinsic saja (misal saham IPO).</div>
+                </div>
+                <input id="chkIncludeRel" type="checkbox" />
+              </label>
+
+              <div class="slider-field">
+                <div class="label-row">
+                  <label for="rngOptimism">Tingkat Optimisme (Percentile)</label>
+                  <strong id="dispOptimism" class="tabular-nums">0.50 (50%)</strong>
+                </div>
+                <input id="rngOptimism" type="range" min="0" max="1" step="0.05" />
+              </div>
+
+              <div class="field">
+                <label for="selRelMode">Sumber Multiple</label>
+                <select id="selRelMode">
+                  <option value="all">Semua (Mean PE + Mean PBV)</option>
+                  <option value="pe">Hanya Mean PE (3Y, 5Y, 10Y)</option>
+                  <option value="pbv">Hanya Mean PBV (3Y, 5Y, 10Y)</option>
+                </select>
+              </div>
+
+              <div class="two-fields">
+                <div class="mult-box">
+                  <div class="mult-title">Mean PE Historis</div>
+                  <div class="mult-row"><label for="inpPe3">PE 3Y</label><input id="inpPe3" type="number" step="0.01" class="tabular-nums" /></div>
+                  <div class="mult-row"><label for="inpPe5">PE 5Y</label><input id="inpPe5" type="number" step="0.01" class="tabular-nums" /></div>
+                  <div class="mult-row"><label for="inpPe10">PE 10Y</label><input id="inpPe10" type="number" step="0.01" class="tabular-nums" /></div>
+                  <div id="relPeList" class="mult-out tabular-nums"></div>
+                </div>
+                <div class="mult-box">
+                  <div class="mult-title">Mean PBV Historis</div>
+                  <div class="mult-row"><label for="inpPbv3">PBV 3Y</label><input id="inpPbv3" type="number" step="0.01" class="tabular-nums" /></div>
+                  <div class="mult-row"><label for="inpPbv5">PBV 5Y</label><input id="inpPbv5" type="number" step="0.01" class="tabular-nums" /></div>
+                  <div class="mult-row"><label for="inpPbv10">PBV 10Y</label><input id="inpPbv10" type="number" step="0.01" class="tabular-nums" /></div>
+                  <div id="relPbvList" class="mult-out tabular-nums"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step-footer-actions">
+          <button type="button" class="btn btn-secondary next-step-btn" data-goto="step1">&larr; Kembali ke Data Keuangan</button>
+          <button type="button" class="btn btn-primary next-step-btn" data-goto="step3">Lihat Hasil &amp; Analisa Lengkap &rarr;</button>
+        </div>
+      </section>
+
+      <!-- STEP 3: HASIL & ANALISA -->
+      <section id="view-step3" class="step-view hidden">
+        <div class="subtab-bar">
+          <div class="subtabs">
+            <button type="button" class="out-tab active" data-outtab="overview">Ringkasan &amp; Target Harga</button>
+            <button type="button" class="out-tab" data-outtab="beta">Fundamental Beta &amp; Risiko</button>
+            <button type="button" class="out-tab" data-outtab="projection">Proyeksi DCF 100 Tahun</button>
+            <button type="button" class="out-tab" data-outtab="matrix">Matriks Sensitivitas 5&times;5</button>
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm next-step-btn" data-goto="step2">Ubah Asumsi</button>
+        </div>
+
+        <!-- OUT 1: OVERVIEW -->
+        <div id="panel-out-overview" class="out-panel">
+          <div class="card mb-4">
+            <div class="card-header">
+              <div>
+                <h2 class="card-title">Posisi Harga Saham vs Zona Valuasi</h2>
+                <p class="card-desc">Visualisasi jarak harga pasar saat ini ke zona beli (MoS 50% &amp; 30%) dan harga wajar.</p>
+              </div>
+              <div id="overviewKpiChips" class="chip-row tabular-nums"></div>
+            </div>
+            <div id="gaugeContainer" class="chart-wrap"></div>
+          </div>
+
+          <div class="two-col-grid mb-4">
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title text-emerald">Zona Beli (Target Buy MoS)</h3>
+                <div class="inline-num">
+                  <span class="text-xs text-muted">Custom:</span>
+                  <input id="inpCustomMos" type="number" value="35" step="5" min="5" max="80" class="tabular-nums" />
+                  <span>%</span>
+                </div>
+              </div>
+              <table class="data-table">
+                <tbody id="buyTargetsTbody"></tbody>
+              </table>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title text-amber">Zona Jual (Target Sell / Fair Value)</h3>
+              </div>
+              <table class="data-table">
+                <tbody id="sellTargetsTbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">Diagnosis Model Otomatis</h3>
+            </div>
+            <div id="diagnosticContent" class="diag-list"></div>
+          </div>
+        </div>
+
+        <!-- OUT 2: FUNDAMENTAL BETA -->
+        <div id="panel-out-beta" class="out-panel hidden">
+          <div class="card mb-4">
+            <div class="card-header">
+              <div>
+                <h2 class="card-title">Profil Risiko Fundamental Beta (6 Faktor)</h2>
+                <p class="card-desc">Skala 0.33 (paling aman) s.d. 2.00 (paling berisiko) yang menentukan Discount Rate CAPM.</p>
+              </div>
+              <div class="chip-row tabular-nums">
+                <span class="chip">Beta Avg: <strong id="betaAvgDisp">-</strong></span>
+                <span class="chip">Adj: <strong id="betaAdjDisp">-</strong></span>
+                <span class="chip chip-strong">Final: <strong id="betaFinalDisp">-</strong></span>
+              </div>
+            </div>
+            <div id="betaChartContainer" class="chart-wrap"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">Tabel Kalibrasi Skala Beta &amp; Discount Rate</h3>
+              <span id="capmFormulaDisp" class="text-xs text-muted tabular-nums">-</span>
+            </div>
+            <div class="table-scroll">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Faktor</th>
+                    <th class="num">0.33</th>
+                    <th class="num">0.67</th>
+                    <th class="num">1.00</th>
+                    <th class="num">1.50</th>
+                    <th class="num">2.00</th>
+                    <th class="num">Nilai Aktual</th>
+                    <th class="num">Beta</th>
+                  </tr>
+                </thead>
+                <tbody id="betaTableTbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- OUT 3: PROYEKSI 100 TAHUN -->
+        <div id="panel-out-projection" class="out-panel hidden">
+          <div class="three-col-grid mb-4">
+            <div class="card stat-card">
+              <div class="stat-label">Present Value Tahun 1–10</div>
+              <div id="pvY10" class="stat-val-lg tabular-nums">-</div>
+              <div id="pvY10Pct" class="stat-note tabular-nums">-</div>
+            </div>
+            <div class="card stat-card">
+              <div class="stat-label">Present Value Tahun 11–30</div>
+              <div id="pvY30" class="stat-val-lg tabular-nums">-</div>
+              <div id="pvY30Pct" class="stat-note tabular-nums">-</div>
+            </div>
+            <div class="card stat-card">
+              <div class="stat-label">Present Value Tahun 31–100</div>
+              <div id="pvY100" class="stat-val-lg tabular-nums">-</div>
+              <div id="pvY100Pct" class="stat-note tabular-nums">-</div>
+            </div>
+          </div>
+
+          <div class="card mb-4">
+            <div class="card-header">
+              <div>
+                <h2 class="card-title">Kurva Future Value vs Present Value EPS</h2>
+                <p class="card-desc">Arahkan kursor ke grafik untuk melihat nilai tiap tahun proyeksi.</p>
+              </div>
+              <div class="seg-group">
+                <button type="button" data-zoom="30" class="zoom-btn active">30 Tahun</button>
+                <button type="button" data-zoom="100" class="zoom-btn">100 Tahun</button>
+              </div>
+            </div>
+            <div id="dcfChartContainer" class="chart-wrap"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">Tabel Proyeksi EPS Tahunan</h3>
+              <select id="selProjRows">
+                <option value="compact">Ringkas (Thn 1–15 + Milestone)</option>
+                <option value="all">Semua 100 Tahun</option>
+              </select>
+            </div>
+            <div class="table-scroll max-h-table">
+              <table class="data-table sticky-head">
+                <thead>
+                  <tr>
+                    <th>Tahun</th>
+                    <th class="num">Future Value EPS</th>
+                    <th class="num">Present Value</th>
+                    <th class="num">Kumulatif PV</th>
+                    <th class="num">Kontribusi</th>
+                  </tr>
+                </thead>
+                <tbody id="projTbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- OUT 4: MATRIKS SENSITIVITAS -->
+        <div id="panel-out-matrix" class="out-panel hidden">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2 class="card-title">Matriks Sensitivitas 5&times;5 (Uji Stres Skenario)</h2>
+                <p class="card-desc">Baris: variasi Growth 0–10Y (&plusmn;2%, &plusmn;4%) &bull; Kolom: variasi Discount Rate (&plusmn;1%, &plusmn;2%).</p>
+              </div>
+              <select id="selMatrixMetric">
+                <option value="fv">Tampilkan Final Valuation &amp; MoS</option>
+                <option value="iv">Tampilkan Intrinsic Value &amp; MoS</option>
+              </select>
+            </div>
+            <div id="matrixContainer" class="table-scroll"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- WATCHLIST TAB -->
+      <section id="view-watchlist" class="step-view hidden">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">Watchlist &amp; Perbandingan 15 Emiten Utama</h2>
+              <p class="card-desc">Klik baris mana saja untuk membuka analisa lengkapnya. Gunakan tombol Refresh Semua untuk memperbarui harga live IDX.</p>
+            </div>
+            <div class="btn-group">
+              <button id="btnRefreshAllWatchlist" type="button" class="btn btn-secondary">Refresh Semua Harga Live</button>
+              <select id="selSortWatchlist">
+                <option value="mosDesc">Urutkan: MoS Tertinggi</option>
+                <option value="drAsc">Urutkan: Discount Rate Terendah</option>
+                <option value="tickerAsc">Urutkan: Ticker A–Z</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Ticker</th>
+                  <th class="num">Harga Pasar</th>
+                  <th class="num">Beta</th>
+                  <th class="num">Discount Rate</th>
+                  <th class="num">Intrinsic</th>
+                  <th class="num">Final Valuation</th>
+                  <th class="num">MoS</th>
+                  <th class="center">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="watchlistTbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- MODAL: PASTE EXCEL / JSON -->
+  <div id="modalPaste" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>Tempel Data Spreadsheet atau Export/Import JSON</h3>
+        <button type="button" class="btn btn-ghost btn-sm" data-close="modalPaste">Tutup</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-stack">
+          <div>
+            <div class="font-semibold mb-1">Opsi A — Tempel dari Excel / Google Sheets</div>
+            <p class="text-xs text-muted mb-2">Format tiap baris (pisahkan dengan Tab atau Koma): <code>Tahun, Penjualan, LabaUsaha, LabaBersih</code></p>
+            <textarea id="txtPasteRows" rows="4" placeholder="2025&#9;207783&#9;73248&#9;56652&#10;2024&#9;199266&#9;78216&#9;59945"></textarea>
+            <button id="btnApplyPaste" type="button" class="btn btn-primary btn-sm mt-2">Terapkan ke Tabel Historis</button>
+          </div>
+          <hr class="divider" />
+          <div>
+            <div class="label-row mb-2">
+              <span class="font-semibold">Opsi B — JSON Emiten Aktif</span>
+              <div class="btn-group">
+                <button id="btnCopyJson" type="button" class="btn btn-secondary btn-sm">Salin JSON</button>
+                <button id="btnLoadJson" type="button" class="btn btn-primary btn-sm">Muat JSON</button>
+              </div>
+            </div>
+            <textarea id="txtJsonBox" rows="5" class="mono"></textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: PENGATURAN LIVE DATA (HYBRID) -->
+  <div id="modalLive" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>Pengaturan Sumber Harga &amp; Market Cap Live</h3>
+        <button type="button" class="btn btn-ghost btn-sm" data-close="modalLive">Tutup</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-stack">
+          <div class="field">
+            <label for="selLiveProvider">Mode Pengambilan Data Pasar</label>
+            <select id="selLiveProvider">
+              <option value="hybrid">Hybrid (Otomatis Google Finance Bridge jika diisi, fallback ke Yahoo .JK)</option>
+              <option value="yahoo">Yahoo Finance Proxy (/api/quote?ticker=...) — Zero Setup</option>
+              <option value="gas">Hanya Google Sheets Apps Script Bridge (GOOGLEFINANCE)</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="inpGasUrl">URL Google Apps Script Web App (Opsional)</label>
+            <input id="inpGasUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec" />
+            <p class="text-xs text-muted mt-1">
+              Kosongkan untuk langsung memakai proxy Vercel (Yahoo Finance <code>.JK</code>). Jika ingin 100% dari rumus <code>=GOOGLEFINANCE()</code> di Google Sheets kamu, salin kode di file <code>apps-script/Code.gs</code> ke Apps Script lalu tempel URL-nya di sini.
+            </p>
+          </div>
+
+          <label class="toggle-box">
+            <div>
+              <div class="font-semibold">Otomatis Sync Harga saat Ganti Emiten</div>
+              <div class="text-xs text-muted">Saat memilih emiten di menu atas, langsung tarik harga &amp; market cap terbaru.</div>
+            </div>
+            <input id="chkAutoSync" type="checkbox" />
+          </label>
+
+          <label class="toggle-box">
+            <div>
+              <div class="font-semibold">Ikut Update EPS TTM &amp; BVPS dari Live API</div>
+              <div class="text-xs text-muted">Jika dimatikan, hanya Harga &amp; Market Cap yang diperbarui (EPS TTM/BVPS tetap sesuai input manualmu).</div>
+            </div>
+            <input id="chkSyncEpsBvps" type="checkbox" />
+          </label>
+
+          <div class="btn-group justify-end pt-2">
+            <button id="btnSaveLiveSettings" type="button" class="btn btn-primary">Simpan Pengaturan</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <script type="module" src="/src/ui/app.js"></script>
+</body>
+</html>
