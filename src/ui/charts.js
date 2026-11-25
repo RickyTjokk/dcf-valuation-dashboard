@@ -196,9 +196,9 @@ export function renderDcfChart(container, { rows, projZoom, fmtRp }) {
   const dotFv = container.querySelector('#dcfDotFv');
   const dotPv = container.querySelector('#dcfDotPv');
 
-  svgEl.addEventListener('mousemove', (e) => {
+  const updateFromClientX = (clientX) => {
     const rect = svgEl.getBoundingClientRect();
-    const relX = ((e.clientX - rect.left) / rect.width) * W;
+    const relX = ((clientX - rect.left) / rect.width) * W;
     const t = Math.max(0, Math.min(1, (relX - padL) / plotW));
     const idx = Math.round(t * (subset.length - 1));
     const r = subset[idx];
@@ -216,15 +216,36 @@ export function renderDcfChart(container, { rows, projZoom, fmtRp }) {
       <span>PV EPS: <strong>${fmtRp(r.pv)}</strong></span>
       <span>Kumulatif PV: <strong>${fmtRp(r.cumPv)}</strong></span>
     `;
-  });
+  };
 
-  svgEl.addEventListener('mouseleave', () => {
+  const clearTip = () => {
     cross.setAttribute('x1', -10);
     cross.setAttribute('x2', -10);
     dotFv.setAttribute('cx', -10);
     dotPv.setAttribute('cx', -10);
     tip.classList.add('hidden');
-  });
+  };
+
+  svgEl.addEventListener('mousemove', (e) => updateFromClientX(e.clientX));
+  svgEl.addEventListener('mouseleave', clearTip);
+  svgEl.addEventListener(
+    'touchstart',
+    (e) => {
+      if (e.touches && e.touches[0]) updateFromClientX(e.touches[0].clientX);
+    },
+    { passive: true }
+  );
+  svgEl.addEventListener(
+    'touchmove',
+    (e) => {
+      if (e.touches && e.touches[0]) {
+        e.preventDefault();
+        updateFromClientX(e.touches[0].clientX);
+      }
+    },
+    { passive: false }
+  );
+  svgEl.addEventListener('touchend', clearTip);
 }
 
 export function renderHistoryChart(container, { history }) {
@@ -298,19 +319,25 @@ export function renderHistoryChart(container, { history }) {
   `;
 
   const tip = container.querySelector('.hist-tip');
+  const showRowTip = (idx) => {
+    const r = rows[idx];
+    if (!r) return;
+    const opm = r.sales > 0 ? ((r.op / r.sales) * 100).toFixed(1) : '0.0';
+    const npm = r.sales > 0 ? ((r.ni / r.sales) * 100).toFixed(1) : '0.0';
+    tip.classList.remove('hidden');
+    tip.innerHTML = `
+      <span><strong>Tahun ${r.year}</strong></span>
+      <span>Penjualan: <strong>${Math.round(r.sales).toLocaleString('id-ID')} M</strong></span>
+      <span>Laba Usaha: <strong>${Math.round(r.op).toLocaleString('id-ID')} M</strong> (OPM ${opm}%)</span>
+      <span>Laba Bersih: <strong>${Math.round(r.ni).toLocaleString('id-ID')} M</strong> (NPM ${npm}%)</span>
+    `;
+  };
+
   container.querySelectorAll('.hist-group').forEach((g) => {
-    g.addEventListener('mouseenter', () => {
-      const r = rows[Number(g.dataset.hidx)];
-      const opm = r.sales > 0 ? ((r.op / r.sales) * 100).toFixed(1) : '0.0';
-      const npm = r.sales > 0 ? ((r.ni / r.sales) * 100).toFixed(1) : '0.0';
-      tip.classList.remove('hidden');
-      tip.innerHTML = `
-        <span><strong>Tahun ${r.year}</strong></span>
-        <span>Penjualan: <strong>${Math.round(r.sales).toLocaleString('id-ID')} M</strong></span>
-        <span>Laba Usaha: <strong>${Math.round(r.op).toLocaleString('id-ID')} M</strong> (OPM ${opm}%)</span>
-        <span>Laba Bersih: <strong>${Math.round(r.ni).toLocaleString('id-ID')} M</strong> (NPM ${npm}%)</span>
-      `;
-    });
+    const idx = Number(g.dataset.hidx);
+    g.addEventListener('mouseenter', () => showRowTip(idx));
+    g.addEventListener('click', () => showRowTip(idx));
+    g.addEventListener('touchstart', () => showRowTip(idx), { passive: true });
   });
   container.addEventListener('mouseleave', () => tip.classList.add('hidden'));
 }

@@ -780,6 +780,22 @@ body.mode-beginner .pro-only { display: none !important; }
   align-items: stretch;
 }
 
+/* V7 IPHONE / IOS IMMERSIVE POLISH */
+button, a, select, input, textarea {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.mobile-tab-bar,
+.sheet-handle {
+  display: none;
+}
+
+@keyframes sheetUp {
+  from { transform: translateY(100%); opacity: 0.7; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
 /* RESPONSIVE */
 @media (max-width: 1120px) {
   .hero-grid, .hero-grid-v3 { grid-template-columns: 1fr 1fr; }
@@ -789,10 +805,182 @@ body.mode-beginner .pro-only { display: none !important; }
   .meta-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
+@media (max-width: 768px) {
+  .app-shell {
+    padding-top: max(12px, env(safe-area-inset-top));
+    padding-bottom: calc(92px + env(safe-area-inset-bottom));
+  }
+
+  /* Compact iOS Topbar */
+  .topbar {
+    top: max(6px, env(safe-area-inset-top));
+    padding: 8px 10px;
+    border-radius: 16px;
+  }
+  .brand-text { display: none; }
+  .brand-mark { width: 32px; height: 32px; font-size: 11px; border-radius: 9px; }
+
+  /* Hide desktop stepper; keep compact utility bar */
+  .stepper-list { display: none; }
+  .stepper-bar { margin-bottom: 10px; }
+  .stepper-utils { width: 100%; justify-content: space-between; }
+
+  /* Floating Frosted iOS Bottom Tab Bar */
+  .mobile-tab-bar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 55;
+    background: rgba(255, 255, 255, 0.86);
+    backdrop-filter: blur(22px);
+    -webkit-backdrop-filter: blur(22px);
+    border-top: 1px solid var(--border);
+    padding: 6px 8px calc(8px + env(safe-area-inset-bottom));
+    box-shadow: 0 -8px 28px rgba(15, 23, 42, 0.08);
+  }
+  html.dark .mobile-tab-bar {
+    background: rgba(11, 17, 32, 0.86);
+    box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.45);
+  }
+  .mobile-tab-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-height: 44px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: color 0.15s, background 0.15s, transform 0.12s;
+  }
+  .mobile-tab-btn svg {
+    width: 20px;
+    height: 20px;
+  }
+  .mobile-tab-btn.active {
+    color: var(--emerald);
+    background: var(--emerald-soft);
+  }
+  .mobile-tab-btn:active {
+    transform: scale(0.95);
+  }
+
+  .toast {
+    left: 16px;
+    right: 16px;
+    bottom: calc(80px + env(safe-area-inset-bottom));
+    text-align: center;
+  }
+}
+
 @media (max-width: 680px) {
-  .app-shell { padding: 10px 12px 36px; }
-  .hero-grid, .hero-grid-v3, .ai-explain-box, .method-strip, .ddm-input-grid, .lynch-stats-grid { grid-template-columns: 1fr; }
+  .app-shell {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  .hero-grid, .hero-grid-v3, .ai-explain-box, .ddm-input-grid, .lynch-stats-grid { grid-template-columns: 1fr; }
   .two-col-grid, .stat-cards-grid, .two-fields, .meta-grid { grid-template-columns: 1fr; }
   .step-arrow { display: none; }
-  .picker-wrap { max-width: 100%; flex-basis: 100%; }
+  .picker-wrap { max-width: 100%; flex: 1 1 auto; }
+  .topbar-inner { gap: 8px; }
+  .topbar-actions { width: 100%; justify-content: space-between; }
+
+  /* Prevent iOS Safari auto-zoom when focusing inputs */
+  input[type="text"],
+  input[type="number"],
+  input[type="url"],
+  input[type="password"],
+  input[type="search"],
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  /* Horizontal Snap-Scroll Carousels for Multi-Method & Scenarios */
+  .method-strip,
+  #scenarioCards {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    gap: 10px;
+    padding-bottom: 6px;
+    margin-left: -12px;
+    margin-right: -12px;
+    padding-left: 12px;
+    padding-right: 12px;
+    scrollbar-width: none;
+  }
+  .method-strip::-webkit-scrollbar,
+  #scenarioCards::-webkit-scrollbar {
+    display: none;
+  }
+  .method-strip > .method-card,
+  #scenarioCards > .scenario-card {
+    flex: 0 0 76%;
+    scroll-snap-align: start;
+  }
+
+  /* Subtabs horizontal scroll cleanly */
+  .subtabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    max-width: 100%;
+  }
+  .subtabs::-webkit-scrollbar { display: none; }
+  .out-tab { white-space: nowrap; flex-shrink: 0; }
+
+  /* Native iOS Bottom Sheet for Modals */
+  .modal-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .modal-card,
+  .modal-wide {
+    width: 100%;
+    max-width: 100%;
+    max-height: 88dvh;
+    border-radius: 22px 22px 0 0;
+    border-bottom: none;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom));
+    animation: sheetUp 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .sheet-handle {
+    display: block;
+    width: 38px;
+    height: 4.5px;
+    border-radius: 999px;
+    background: var(--border);
+    margin: 8px auto 2px;
+  }
+
+  /* Stock Picker as iOS Bottom Sheet on iPhone */
+  .picker-dropdown {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: 0;
+    z-index: 75;
+    border-radius: 22px 22px 0 0;
+    max-height: 76dvh;
+    padding: 12px 14px calc(16px + env(safe-area-inset-bottom));
+    box-shadow: 0 -12px 36px rgba(0, 0, 0, 0.28);
+    animation: sheetUp 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .picker-list {
+    max-height: 55dvh;
+  }
 }

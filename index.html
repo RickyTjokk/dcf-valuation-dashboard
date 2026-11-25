@@ -2,7 +2,13 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="DCF Lab" />
+  <meta id="metaThemeColor" name="theme-color" content="#f8fafc" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <title>DCF Valuation Lab — Kalkulator Saham Fundamental Beta &amp; 100Y EPS</title>
   <meta name="description" content="Kalkulator & Dashboard Valuasi Saham IDX interaktif berbasis Fundamental Beta 6 faktor, DCF EPS 100 tahun, Relative Valuation PE/PBV, serta data harga & market cap live." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -836,6 +842,7 @@
   <!-- MODAL: AI SMART INPUT & JSON BACKUP -->
   <div id="modalPaste" class="modal-overlay hidden">
     <div class="modal-card modal-wide">
+      <div class="sheet-handle" aria-hidden="true"></div>
       <div class="modal-head">
         <div class="modal-tabs">
           <button type="button" class="modal-tab active" data-mtab="ai">&#10024; AI Smart Input</button>
@@ -912,6 +919,7 @@
   <!-- MODAL: PENGATURAN LIVE DATA & AI -->
   <div id="modalLive" class="modal-overlay hidden">
     <div class="modal-card">
+      <div class="sheet-handle" aria-hidden="true"></div>
       <div class="modal-head">
         <h3>Pengaturan Live Data &amp; AI</h3>
         <button type="button" class="btn btn-ghost btn-sm" data-close="modalLive">Tutup</button>
@@ -966,6 +974,26 @@
       </div>
     </div>
   </div>
+
+  <!-- FLOATING FROSTED MOBILE BOTTOM TAB BAR (iPhone / iOS Thumb Zone) -->
+  <nav id="mobileTabBar" class="mobile-tab-bar" aria-label="Navigasi Utama Mobile">
+    <button type="button" class="mobile-tab-btn" data-step="step1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      <span>Data</span>
+    </button>
+    <button type="button" class="mobile-tab-btn" data-step="step2">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+      <span>Asumsi</span>
+    </button>
+    <button type="button" class="mobile-tab-btn active" data-step="step3">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+      <span>Hasil</span>
+    </button>
+    <button type="button" class="mobile-tab-btn" data-step="watchlist">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      <span>Watchlist</span>
+    </button>
+  </nav>
 
   <!-- TOAST -->
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>

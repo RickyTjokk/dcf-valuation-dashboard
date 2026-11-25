@@ -58,6 +58,10 @@ let lastExplainTicker = '';
 // =========================================================================
 function applyTheme(theme) {
   document.documentElement.classList.toggle('dark', theme === 'dark');
+  const metaTheme = document.getElementById('metaThemeColor');
+  if (metaTheme) {
+    metaTheme.setAttribute('content', theme === 'dark' ? '#0b1120' : '#f8fafc');
+  }
   try {
     localStorage.setItem(THEME_KEY, theme);
   } catch {}
@@ -928,14 +932,17 @@ function renderWatchlistOut() {
 // =========================================================================
 // NAVIGATION & EVENTS
 // =========================================================================
-function setStep(step) {
+function setStep(step, { scroll = false } = {}) {
   activeStep = step;
-  document.querySelectorAll('.step-btn').forEach((b) => {
+  document.querySelectorAll('.step-btn, .mobile-tab-btn').forEach((b) => {
     b.classList.toggle('active', b.dataset.step === step);
   });
   document.querySelectorAll('.step-view').forEach((v) => {
     v.classList.toggle('hidden', v.id !== 'view-' + step);
   });
+  if (scroll && window.innerWidth <= 768) {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 }
 
 function setOutTab(tab) {
@@ -948,8 +955,12 @@ function setOutTab(tab) {
   });
 }
 
-document.querySelectorAll('.step-btn').forEach((b) => b.addEventListener('click', () => setStep(b.dataset.step)));
-document.querySelectorAll('.next-step-btn').forEach((b) => b.addEventListener('click', () => setStep(b.dataset.goto)));
+document.querySelectorAll('.step-btn, .mobile-tab-btn').forEach((b) =>
+  b.addEventListener('click', () => setStep(b.dataset.step, { scroll: true }))
+);
+document.querySelectorAll('.next-step-btn').forEach((b) =>
+  b.addEventListener('click', () => setStep(b.dataset.goto, { scroll: true }))
+);
 document.querySelectorAll('.out-tab').forEach((b) => b.addEventListener('click', () => setOutTab(b.dataset.outtab)));
 document.querySelectorAll('.mode-btn').forEach((b) =>
   b.addEventListener('click', () => {
