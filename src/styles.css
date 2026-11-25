@@ -424,7 +424,22 @@ input[type="range"] { width: 100%; accent-color: var(--emerald); cursor: pointer
 .svg-chart { width: 100%; height: auto; display: block; overflow: visible; }
 .svg-chart.crosshair { cursor: crosshair; }
 .chart-legend { display: flex; gap: 16px; font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
+.chart-legend-wrap { flex-wrap: wrap; align-items: center; gap: 6px 10px; }
 .chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface-subtle);
+  color: var(--text-muted); font-size: 11.5px; font-weight: 600;
+  font-family: inherit; cursor: pointer; transition: all 0.14s;
+}
+.legend-btn:hover { color: var(--text); border-color: var(--text-muted); }
+.legend-btn.active {
+  background: var(--surface); color: var(--text);
+  border-color: var(--emerald); box-shadow: 0 0 0 2px var(--emerald-soft);
+}
+.legend-cagr { font-size: 11.5px; margin-left: auto; }
+.legend-dash { width: 14px; height: 0; border-top: 2px dashed var(--emerald); display: inline-block; }
 .legend-line { width: 14px; height: 3px; display: inline-block; border-radius: 2px; }
 .legend-box { width: 12px; height: 10px; display: inline-block; border-radius: 2px; opacity: 0.7; }
 .chart-tooltip {

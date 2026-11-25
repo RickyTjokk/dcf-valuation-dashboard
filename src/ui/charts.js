@@ -255,11 +255,19 @@ export function renderHistoryChart(container, { history }) {
     return;
   }
 
+  const METRICS = {
+    sales: { key: 'sales', label: 'Penjualan', lineColor: '#0284c7' },
+    op: { key: 'op', label: 'Laba Usaha', lineColor: 'var(--amber)' },
+    ni: { key: 'ni', label: 'Laba Bersih', lineColor: 'var(--emerald)' },
+  };
+  const activeKey = METRICS[container.dataset.histMetric] ? container.dataset.histMetric : 'ni';
+  const activeCfg = METRICS[activeKey];
+
   const W = 540;
-  const H = 180;
+  const H = 204;
   const padL = 52;
   const padR = 14;
-  const padT = 14;
+  const padT = 30;
   const padB = 26;
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
@@ -283,6 +291,7 @@ export function renderHistoryChart(container, { history }) {
   const groupW = plotW / rows.length;
   const barW = Math.min(18, Math.max(7, (groupW - 16) / 3));
   let bars = '';
+  const activePts = [];
 
   rows.forEach((r, idx) => {
     const cx = padL + idx * groupW + groupW / 2;
@@ -294,26 +303,108 @@ export function renderHistoryChart(container, { history }) {
     const hOp = Math.max(2, yZero - yOf(r.op || 0));
     const hNi = Math.max(2, yZero - yOf(r.ni || 0));
 
+    const opSales = activeKey === 'sales' ? 0.52 : 0.2;
+    const opOp = activeKey === 'op' ? 0.95 : 0.42;
+    const opNi = activeKey === 'ni' ? 0.96 : 0.45;
+
+    const activeX =
+      activeKey === 'sales'
+        ? xSales + barW / 2
+        : activeKey === 'op'
+        ? xOp + barW / 2
+        : xNi + barW / 2;
+    const activeVal = Number(r[activeKey]) || 0;
+    const prevVal = idx > 0 ? Number(rows[idx - 1][activeKey]) || 0 : null;
+    const yoy =
+      idx > 0 && prevVal !== null && prevVal !== 0
+        ? ((activeVal - prevVal) / Math.abs(prevVal)) * 100
+        : null;
+    activePts.push({ x: activeX, y: yOf(activeVal), val: activeVal, year: r.year, yoy });
+
     bars += `
       <g class="hist-group" data-hidx="${idx}" style="cursor:pointer">
         <rect x="${cx - groupW / 2}" y="${padT}" width="${groupW}" height="${plotH}" fill="transparent" />
-        <rect x="${xSales}" y="${yZero - hSales}" width="${barW}" height="${hSales}" rx="3" fill="var(--primary)" opacity="0.28" />
-        <rect x="${xOp}" y="${yZero - hOp}" width="${barW}" height="${hOp}" rx="3" fill="var(--amber)" opacity="0.78" />
-        <rect x="${xNi}" y="${yZero - hNi}" width="${barW}" height="${hNi}" rx="3" fill="${(r.ni || 0) >= 0 ? 'var(--emerald)' : 'var(--rose)'}" opacity="0.92" />
+        <rect class="hist-bar" data-metric="sales" x="${xSales}" y="${yZero - hSales}" width="${barW}" height="${hSales}" rx="3" fill="var(--primary)" opacity="${opSales}" />
+        <rect class="hist-bar" data-metric="op" x="${xOp}" y="${yZero - hOp}" width="${barW}" height="${hOp}" rx="3" fill="var(--amber)" opacity="${opOp}" />
+        <rect class="hist-bar" data-metric="ni" x="${xNi}" y="${yZero - hNi}" width="${barW}" height="${hNi}" rx="3" fill="${(r.ni || 0) >= 0 ? 'var(--emerald)' : 'var(--rose)'}" opacity="${opNi}" />
         <text x="${cx}" y="${H - 7}" text-anchor="middle" fill="var(--text-muted)" font-size="10.5" font-weight="600">${r.year}</text>
       </g>
     `;
   });
 
+  // YoY % trendline + nodes + pill badges for active metric
+  let trendSvg = '';
+  if (activePts.length >= 2) {
+    const lineD = activePts
+      .map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+      .join(' ');
+    trendSvg += `<path d="${lineD}" fill="none" stroke="${activeCfg.lineColor}" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none" />`;
+  }
+
+  // Straight CAGR line from first year to last year for active metric
+  let cagrVal = null;
+  if (activePts.length >= 2) {
+    const first = activePts[0];
+    const last = activePts[activePts.length - 1];
+    if (first.val > 0 && last.val > 0) {
+      const span = Math.abs(last.year - first.year) || activePts.length - 1;
+      cagrVal = Math.pow(last.val / first.val, 1 / span) - 1;
+
+      trendSvg += `
+        <line x1="${first.x.toFixed(1)}" y1="${first.y.toFixed(1)}" x2="${last.x.toFixed(1)}" y2="${last.y.toFixed(1)}"
+          stroke="${activeCfg.lineColor}" stroke-width="1.9" stroke-dasharray="5,4" opacity="0.88"
+          marker-end="url(#cagrArrow-${activeKey})" style="pointer-events:none" />
+      `;
+    }
+  }
+
+  // Nodes & YoY % pills
+  activePts.forEach((p) => {
+    trendSvg += `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.6" fill="${activeCfg.lineColor}" stroke="var(--surface)" stroke-width="1.6" style="pointer-events:none" />`;
+    if (p.yoy !== null) {
+      const pos = p.yoy >= 0;
+      const lbl = `${pos ? '+' : ''}${p.yoy.toFixed(1)}%`;
+      const pw = Math.max(36, lbl.length * 5.4 + 8);
+      const py = Math.max(9, p.y - 16);
+      const px = Math.max(padL + pw / 2, Math.min(W - padR - pw / 2, p.x));
+      trendSvg += `
+        <g style="pointer-events:none">
+          <rect x="${(px - pw / 2).toFixed(1)}" y="${(py - 7.5).toFixed(1)}" width="${pw}" height="14" rx="7"
+            fill="${pos ? 'var(--emerald-soft)' : 'var(--rose-soft)'}" />
+          <text x="${px.toFixed(1)}" y="${(py + 2.5).toFixed(1)}" text-anchor="middle"
+            fill="${pos ? 'var(--emerald)' : 'var(--rose)'}" font-size="8.8" font-weight="700">${lbl}</text>
+        </g>
+      `;
+    }
+  });
+
+  const cagrChip =
+    cagrVal !== null
+      ? `<span class="legend-cagr"><i class="legend-dash" style="border-color:${activeCfg.lineColor}"></i> CAGR ${activeCfg.label}: <strong style="color:${activeCfg.lineColor}">${cagrVal >= 0 ? '+' : ''}${(cagrVal * 100).toFixed(1)}%/thn</strong></span>`
+      : '';
+
   container.innerHTML = `
-    <div class="chart-legend">
-      <span><i class="legend-box" style="background:var(--primary);opacity:0.35"></i> Penjualan</span>
-      <span><i class="legend-box" style="background:var(--amber)"></i> Laba Usaha</span>
-      <span><i class="legend-box" style="background:var(--emerald)"></i> Laba Bersih</span>
+    <div class="chart-legend chart-legend-wrap">
+      <button type="button" class="legend-btn ${activeKey === 'sales' ? 'active' : ''}" data-metric="sales" title="Klik untuk lihat YoY & CAGR Penjualan">
+        <i class="legend-box" style="background:var(--primary);opacity:0.55"></i> Penjualan
+      </button>
+      <button type="button" class="legend-btn ${activeKey === 'op' ? 'active' : ''}" data-metric="op" title="Klik untuk lihat YoY & CAGR Laba Usaha">
+        <i class="legend-box" style="background:var(--amber)"></i> Laba Usaha
+      </button>
+      <button type="button" class="legend-btn ${activeKey === 'ni' ? 'active' : ''}" data-metric="ni" title="Klik untuk lihat YoY & CAGR Laba Bersih">
+        <i class="legend-box" style="background:var(--emerald)"></i> Laba Bersih
+      </button>
+      ${cagrChip}
     </div>
-    <svg viewBox="0 0 ${W} ${H}" class="svg-chart" role="img" aria-label="Grafik Tren Kinerja Historis">
+    <svg viewBox="0 0 ${W} ${H}" class="svg-chart" role="img" aria-label="Grafik Tren Kinerja Historis Interaktif">
+      <defs>
+        <marker id="cagrArrow-${activeKey}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse">
+          <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="${activeCfg.lineColor}" />
+        </marker>
+      </defs>
       ${grid}
       ${bars}
+      ${trendSvg}
     </svg>
     <div class="chart-tooltip hidden hist-tip"></div>
   `;
@@ -324,14 +415,38 @@ export function renderHistoryChart(container, { history }) {
     if (!r) return;
     const opm = r.sales > 0 ? ((r.op / r.sales) * 100).toFixed(1) : '0.0';
     const npm = r.sales > 0 ? ((r.ni / r.sales) * 100).toFixed(1) : '0.0';
+    const pt = activePts[idx];
+    const yoyText =
+      pt && pt.yoy !== null
+        ? `<span>YoY ${activeCfg.label}: <strong style="color:${pt.yoy >= 0 ? 'var(--emerald)' : 'var(--rose)'}">${pt.yoy >= 0 ? '+' : ''}${pt.yoy.toFixed(1)}%</strong></span>`
+        : '';
     tip.classList.remove('hidden');
     tip.innerHTML = `
       <span><strong>Tahun ${r.year}</strong></span>
       <span>Penjualan: <strong>${Math.round(r.sales).toLocaleString('id-ID')} M</strong></span>
       <span>Laba Usaha: <strong>${Math.round(r.op).toLocaleString('id-ID')} M</strong> (OPM ${opm}%)</span>
       <span>Laba Bersih: <strong>${Math.round(r.ni).toLocaleString('id-ID')} M</strong> (NPM ${npm}%)</span>
+      ${yoyText}
     `;
   };
+
+  container.querySelectorAll('.legend-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      container.dataset.histMetric = btn.dataset.metric;
+      renderHistoryChart(container, { history });
+    });
+  });
+
+  container.querySelectorAll('.hist-bar').forEach((bar) => {
+    bar.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const nextMetric = bar.dataset.metric;
+      if (nextMetric && nextMetric !== activeKey) {
+        container.dataset.histMetric = nextMetric;
+        renderHistoryChart(container, { history });
+      }
+    });
+  });
 
   container.querySelectorAll('.hist-group').forEach((g) => {
     const idx = Number(g.dataset.hidx);
