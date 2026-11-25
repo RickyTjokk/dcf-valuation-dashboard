@@ -342,6 +342,7 @@ export function renderHistoryChart(container, { history }) {
   }
 
   // Straight CAGR line from first year to last year for active metric
+  const markerId = `cagrArrow-${container.id || 'hist'}-${activeKey}`;
   let cagrVal = null;
   if (activePts.length >= 2) {
     const first = activePts[0];
@@ -353,7 +354,7 @@ export function renderHistoryChart(container, { history }) {
       trendSvg += `
         <line x1="${first.x.toFixed(1)}" y1="${first.y.toFixed(1)}" x2="${last.x.toFixed(1)}" y2="${last.y.toFixed(1)}"
           stroke="${activeCfg.lineColor}" stroke-width="1.9" stroke-dasharray="5,4" opacity="0.88"
-          marker-end="url(#cagrArrow-${activeKey})" style="pointer-events:none" />
+          marker-end="url(#${markerId})" style="pointer-events:none" />
       `;
     }
   }
@@ -398,7 +399,7 @@ export function renderHistoryChart(container, { history }) {
     </div>
     <svg viewBox="0 0 ${W} ${H}" class="svg-chart" role="img" aria-label="Grafik Tren Kinerja Historis Interaktif">
       <defs>
-        <marker id="cagrArrow-${activeKey}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse">
+        <marker id="${markerId}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse">
           <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="${activeCfg.lineColor}" />
         </marker>
       </defs>
@@ -441,9 +442,16 @@ export function renderHistoryChart(container, { history }) {
     bar.addEventListener('click', (e) => {
       e.stopPropagation();
       const nextMetric = bar.dataset.metric;
+      const g = bar.closest('.hist-group');
+      const idx = g ? Number(g.dataset.hidx) : -1;
       if (nextMetric && nextMetric !== activeKey) {
         container.dataset.histMetric = nextMetric;
         renderHistoryChart(container, { history });
+        if (idx >= 0) {
+          container.querySelector(`.hist-group[data-hidx="${idx}"]`)?.dispatchEvent(new Event('mouseenter'));
+        }
+      } else if (idx >= 0) {
+        showRowTip(idx);
       }
     });
   });
@@ -452,7 +460,6 @@ export function renderHistoryChart(container, { history }) {
     const idx = Number(g.dataset.hidx);
     g.addEventListener('mouseenter', () => showRowTip(idx));
     g.addEventListener('click', () => showRowTip(idx));
-    g.addEventListener('touchstart', () => showRowTip(idx), { passive: true });
   });
   container.addEventListener('mouseleave', () => tip.classList.add('hidden'));
 }

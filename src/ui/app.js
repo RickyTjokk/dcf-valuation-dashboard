@@ -204,6 +204,9 @@ function renderPickerList(query = '') {
     (s) => s.ticker.toLowerCase().includes(q) || (s.name || '').toLowerCase().includes(q)
   );
 
+  const CUSTOM_STOCK_ICON =
+    '<span class="custom-stock-icon" title="Data simpanan pribadi" aria-label="Data simpanan pribadi"><svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" aria-hidden="true"><path d="M3.5 1.5A1.5 1.5 0 0 1 5 0h6a1.5 1.5 0 0 1 1.5 1.5v13.8a.5.5 0 0 1-.78.41L8 13.1l-3.72 2.61a.5.5 0 0 1-.78-.41V1.5Z"/></svg></span>';
+
   let html = items
     .map((s) => {
       const active = s.id === state.id ? 'active' : '';
@@ -213,11 +216,11 @@ function renderPickerList(query = '') {
           <div class="ticker-cell">
             ${renderTickerLogoHtml(s.ticker, 24)}
             <div>
-              <strong>${s.ticker}</strong>
+              <strong>${s.ticker}</strong>${s.isCustom ? CUSTOM_STOCK_ICON : ''}
               <span class="picker-item-sub">(${yr}) &middot; ${s.name}</span>
             </div>
           </div>
-          <span class="picker-item-sub tabular-nums">${s.isCustom ? 'Saya' : fmtRp(s.price)}</span>
+          <span class="picker-item-sub tabular-nums">${fmtRp(s.price)}</span>
         </button>`;
     })
     .join('');
@@ -917,7 +920,11 @@ function renderWatchlistOut() {
               <div>
                 <div>
                   <strong>${item.ticker}</strong>
-                  ${item.isCustom ? '<span class="hint-chip">Saya</span>' : ''}
+                  ${
+                    item.isCustom
+                      ? '<span class="custom-stock-icon" title="Data simpanan pribadi" aria-label="Data simpanan pribadi"><svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" aria-hidden="true"><path d="M3.5 1.5A1.5 1.5 0 0 1 5 0h6a1.5 1.5 0 0 1 1.5 1.5v13.8a.5.5 0 0 1-.78.41L8 13.1l-3.72 2.61a.5.5 0 0 1-.78-.41V1.5Z"/></svg></span>'
+                      : ''
+                  }
                 </div>
                 <div class="text-xs text-muted">${item.name}</div>
                 ${item.note ? `<div class="note-line">${item.note}</div>` : ''}

@@ -442,6 +442,10 @@ input[type="range"] { width: 100%; accent-color: var(--emerald); cursor: pointer
 .legend-dash { width: 14px; height: 0; border-top: 2px dashed var(--emerald); display: inline-block; }
 .legend-line { width: 14px; height: 3px; display: inline-block; border-radius: 2px; }
 .legend-box { width: 12px; height: 10px; display: inline-block; border-radius: 2px; opacity: 0.7; }
+.custom-stock-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--emerald); margin-left: 4px; vertical-align: -1px;
+}
 .chart-tooltip {
   margin-top: 8px; padding: 8px 12px; border-radius: 9px;
   background: var(--surface-subtle); border: 1px solid var(--border);
