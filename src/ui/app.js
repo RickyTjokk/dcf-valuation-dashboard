@@ -1,6 +1,7 @@
 import { BETA_SCALE, DEFAULT_INF, computeDCF } from '../engine/dcfEngine.js';
 import { PRESETS } from '../data/presets15.js';
 import { fetchLiveQuote, loadLiveSettings, saveLiveSettings } from '../services/marketApi.js';
+import { smartExtractFinancials, loadLocalGeminiKey, saveLocalGeminiKey } from '../services/smartParser.js';
 import { renderPriceGauge, renderBetaChart, renderDcfChart } from './charts.js';
 
 const STORAGE_KEY = 'dcf_lab_watchlist_v2';
@@ -961,38 +962,201 @@ document.querySelectorAll('.modal-overlay').forEach((ov) =>
   })
 );
 
-document.getElementById('btnPasteModal').addEventListener('click', () => {
+let pendingAiData = null;
+let pendingImageBase64 = '';
+let pendingImageMime = 'image/png';
+
+function openAiModal(tab = 'ai') {
   document.getElementById('txtJsonBox').value = JSON.stringify(state, null, 2);
+  document.querySelectorAll('.modal-tab').forEach((b) => b.classList.toggle('active', b.dataset.mtab === tab));
+  document.getElementById('mpanel-ai').classList.toggle('hidden', tab !== 'ai');
+  document.getElementById('mpanel-json').classList.toggle('hidden', tab !== 'json');
   document.getElementById('modalPaste').classList.remove('hidden');
+}
+
+document.getElementById('btnPasteModal').addEventListener('click', () => openAiModal('ai'));
+document.getElementById('btnStep1Ai').addEventListener('click', () => openAiModal('ai'));
+
+document.querySelectorAll('.modal-tab').forEach((btn) =>
+  btn.addEventListener('click', () => openAiModal(btn.dataset.mtab))
+);
+
+document.getElementById('btnFillExample').addEventListener('click', () => {
+  document.getElementById('txtAiInput').value = `CMRY
+pendapatan tahun 2025 - 2022
+10,724 B\t9,026 B\t7,773 B\t6,378 B\t4,096 B
+
+laba usaha
+1,980 B\t1,671 B\t1,428 B\t1,256 B\t1,007 B
+
+laba bersih
+1,790 B\t1,519 B\t1,242 B\t1,061 B\t790 B
+
+ROE : 26.5%
+NPM : 16.7%
+DER : 0.05x
+EPS TTM : 225
+BVPS : 890`;
 });
 
-document.getElementById('btnApplyPaste').addEventListener('click', () => {
-  const raw = document.getElementById('txtPasteRows').value.trim();
-  if (!raw) return;
-  const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const parsed = [];
-  lines.forEach((line, idx) => {
-    const parts = line.split(/[\t,;]+/).map((x) => parseFloat(x.replace(/[^\d.-]/g, '')));
-    if (parts.length >= 4 && parts.slice(0, 4).every((n) => isFinite(n))) {
-      parsed.push({
-        year: Math.round(parts[0]),
-        sales: parts[1],
-        op: parts[2],
-        ni: parts[3],
-        inf: parts[4] || DEFAULT_INF[idx] || 1.0,
-      });
+function setScreenshotFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    pendingImageBase64 = String(reader.result || '');
+    pendingImageMime = file.type || 'image/png';
+    document.getElementById('imgPreview').src = pendingImageBase64;
+    document.getElementById('dropPrompt').classList.add('hidden');
+    document.getElementById('dropPreviewWrap').classList.remove('hidden');
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearScreenshot() {
+  pendingImageBase64 = '';
+  document.getElementById('inpScreenshotFile').value = '';
+  document.getElementById('dropPrompt').classList.remove('hidden');
+  document.getElementById('dropPreviewWrap').classList.add('hidden');
+}
+
+document.getElementById('btnPickImage').addEventListener('click', () => {
+  document.getElementById('inpScreenshotFile').click();
+});
+document.getElementById('inpScreenshotFile').addEventListener('change', (e) => {
+  if (e.target.files?.[0]) setScreenshotFile(e.target.files[0]);
+});
+document.getElementById('btnClearImage').addEventListener('click', clearScreenshot);
+
+const dropZone = document.getElementById('dropZone');
+dropZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  dropZone.classList.add('dragover');
+});
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  if (e.dataTransfer?.files?.[0]) setScreenshotFile(e.dataTransfer.files[0]);
+});
+
+// Support Ctrl+V image paste anywhere when AI modal is open
+document.getElementById('modalPaste').addEventListener('paste', (e) => {
+  const items = e.clipboardData?.items || [];
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      const file = item.getAsFile();
+      if (file) {
+        setScreenshotFile(file);
+        showToast('Screenshot ditempel — siap diproses AI');
+        break;
+      }
     }
-  });
-  if (parsed.length >= 3) {
-    state.history = parsed.slice(0, 7);
-    state.avgYearsLimit = 'all';
-    syncInputsFromState();
-    renderAll();
-    document.getElementById('modalPaste').classList.add('hidden');
-    showToast(`${state.history.length} tahun data diterapkan`);
-  } else {
-    showToast('Minimal 3 baris: Tahun, Penjualan, Laba Usaha, Laba Bersih');
   }
+});
+
+function renderAiPreview(result) {
+  pendingAiData = result.data;
+  const d = result.data;
+  document.getElementById('aiPreviewBox').classList.remove('hidden');
+  document.getElementById('aiEngineBadge').textContent =
+    result.engine === 'gemini' ? `✨ ${result.model}` : `⚡ ${result.model}`;
+
+  const warnBox = document.getElementById('aiWarningsBox');
+  if (d.warnings && d.warnings.length) {
+    warnBox.classList.remove('hidden');
+    warnBox.innerHTML = d.warnings.map((w) => `<div>&bull; ${w}</div>`).join('');
+  } else {
+    warnBox.classList.add('hidden');
+  }
+
+  const chips = [];
+  if (d.ticker) chips.push(`Ticker: <strong>${d.ticker}</strong>`);
+  if (d.price) chips.push(`Harga: <strong>${fmtRp(d.price)}</strong>`);
+  if (d.marketCapTrillion) chips.push(`MCap: <strong>Rp${d.marketCapTrillion}T</strong>`);
+  if (d.roe !== null) chips.push(`ROE: <strong>${(d.roe * 100).toFixed(2)}%</strong>`);
+  if (d.npm !== null) chips.push(`NPM: <strong>${(d.npm * 100).toFixed(2)}%</strong>`);
+  if (d.der !== null) chips.push(`DER: <strong>${d.der.toFixed(2)}x</strong>`);
+  if (d.epsTTM !== null) chips.push(`EPS TTM: <strong>${fmtRp(d.epsTTM)}</strong>`);
+  if (d.bvps !== null) chips.push(`BVPS: <strong>${fmtRp(d.bvps)}</strong>`);
+  document.getElementById('aiRatioChips').innerHTML = chips.map((c) => `<span class="chip">${c}</span>`).join('');
+
+  if (d.history && d.history.length) {
+    document.getElementById('aiHistoryPreview').innerHTML = `
+      <table class="data-table">
+        <thead><tr><th>Tahun</th><th class="num">Penjualan (M)</th><th class="num">Laba Usaha (M)</th><th class="num">Laba Bersih (M)</th></tr></thead>
+        <tbody>
+          ${d.history
+            .map(
+              (h) => `<tr>
+              <td class="font-semibold">${h.year}</td>
+              <td class="num">${fmtNum(h.sales, 1)}</td>
+              <td class="num">${fmtNum(h.op, 1)}</td>
+              <td class="num">${fmtNum(h.ni, 1)}</td>
+            </tr>`
+            )
+            .join('')}
+        </tbody>
+      </table>`;
+  } else {
+    document.getElementById('aiHistoryPreview').innerHTML =
+      '<div class="text-xs text-muted">Tidak ada tabel tahunan yang terdeteksi (hanya rasio yang diperbarui).</div>';
+  }
+}
+
+document.getElementById('btnRunAiParse').addEventListener('click', async () => {
+  const text = document.getElementById('txtAiInput').value;
+  if (!text.trim() && !pendingImageBase64) {
+    return showToast('Tempel teks data atau screenshot terlebih dahulu');
+  }
+
+  const btn = document.getElementById('btnRunAiParse');
+  btn.disabled = true;
+  btn.textContent = 'Memproses...';
+
+  try {
+    const result = await smartExtractFinancials({
+      text,
+      imageBase64: pendingImageBase64,
+      mimeType: pendingImageMime,
+      currentTicker: state.ticker,
+    });
+    renderAiPreview(result);
+  } catch (err) {
+    showToast(err.message || 'Gagal memproses data');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '&#10024; Proses &amp; Rapikan Data';
+  }
+});
+
+document.getElementById('btnApplyAiData').addEventListener('click', () => {
+  if (!pendingAiData) return;
+  const d = pendingAiData;
+
+  if (d.ticker) state.ticker = d.ticker;
+  if (d.name) state.name = d.name;
+  if (d.price) state.price = d.price;
+  if (d.marketCapTrillion) state.marketCap = d.marketCapTrillion;
+  if (d.roe !== null) state.roe = d.roe;
+  if (d.npm !== null) state.npm = d.npm;
+  if (d.der !== null) state.der = d.der;
+  if (d.epsTTM !== null) state.epsTTM = d.epsTTM;
+  if (d.bvps !== null) state.bvps = d.bvps;
+  if (d.pe3) state.pe3 = d.pe3;
+  if (d.pe5) state.pe5 = d.pe5;
+  if (d.pe10) state.pe10 = d.pe10;
+  if (d.pbv3) state.pbv3 = d.pbv3;
+  if (d.pbv5) state.pbv5 = d.pbv5;
+  if (d.pbv10) state.pbv10 = d.pbv10;
+  if (d.history && d.history.length >= 2) {
+    state.history = clone(d.history);
+    state.avgYearsLimit = 'all';
+  }
+
+  syncInputsFromState();
+  renderAll();
+  document.getElementById('modalPaste').classList.add('hidden');
+  showToast(`Data ${state.ticker} berhasil dirapikan & diterapkan!`);
 });
 
 document.getElementById('btnCopyJson').addEventListener('click', () => {
@@ -1016,11 +1180,12 @@ document.getElementById('btnLoadJson').addEventListener('click', () => {
   }
 });
 
-// Live Settings Modal
+// Live & AI Settings Modal
 document.getElementById('btnLiveSettings').addEventListener('click', () => {
   const s = loadLiveSettings();
   document.getElementById('selLiveProvider').value = s.provider;
   document.getElementById('inpGasUrl').value = s.gasUrl || '';
+  document.getElementById('inpGeminiKey').value = loadLocalGeminiKey();
   document.getElementById('chkAutoSync').checked = !!s.autoSyncOnSelect;
   document.getElementById('chkSyncEpsBvps').checked = !!s.syncEpsBvps;
   document.getElementById('modalLive').classList.remove('hidden');
@@ -1033,8 +1198,9 @@ document.getElementById('btnSaveLiveSettings').addEventListener('click', () => {
     autoSyncOnSelect: document.getElementById('chkAutoSync').checked,
     syncEpsBvps: document.getElementById('chkSyncEpsBvps').checked,
   });
+  saveLocalGeminiKey(document.getElementById('inpGeminiKey').value);
   document.getElementById('modalLive').classList.add('hidden');
-  showToast('Pengaturan Live Data disimpan');
+  showToast('Pengaturan Live Data & AI disimpan');
 });
 
 // Init

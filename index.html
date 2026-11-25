@@ -90,7 +90,7 @@
         </button>
       </div>
       <div class="stepper-utils">
-        <button id="btnPasteModal" type="button" class="btn btn-ghost">Tempel Excel / JSON</button>
+        <button id="btnPasteModal" type="button" class="btn btn-ai">&#10024; AI Smart Input</button>
         <button id="btnReset" type="button" class="btn btn-ghost">Reset</button>
       </div>
     </nav>
@@ -180,6 +180,7 @@
                 <p class="card-desc">Masukkan tahun terbaru di baris paling atas. Kamu juga bisa menempel langsung dari Excel/Sheets.</p>
               </div>
               <div class="btn-group">
+                <button id="btnStep1Ai" type="button" class="btn btn-ai btn-sm">&#10024; AI Smart Input</button>
                 <button id="btnAddYear" type="button" class="btn btn-secondary btn-sm">+ Tahun</button>
                 <button id="btnRemYear" type="button" class="btn btn-ghost btn-sm">- Tahun</button>
               </div>
@@ -656,50 +657,95 @@
     </main>
   </div>
 
-  <!-- MODAL: PASTE EXCEL / JSON -->
+  <!-- MODAL: AI SMART INPUT & JSON BACKUP -->
   <div id="modalPaste" class="modal-overlay hidden">
-    <div class="modal-card">
+    <div class="modal-card modal-wide">
       <div class="modal-head">
-        <h3>Tempel Data Spreadsheet atau Export/Import JSON</h3>
+        <div class="modal-tabs">
+          <button type="button" class="modal-tab active" data-mtab="ai">&#10024; AI Smart Input</button>
+          <button type="button" class="modal-tab" data-mtab="json">JSON Backup</button>
+        </div>
         <button type="button" class="btn btn-ghost btn-sm" data-close="modalPaste">Tutup</button>
       </div>
       <div class="modal-body">
-        <div class="form-stack">
+        <!-- TAB AI SMART INPUT -->
+        <div id="mpanel-ai" class="form-stack">
           <div>
-            <div class="font-semibold mb-1">Opsi A — Tempel dari Excel / Google Sheets</div>
-            <p class="text-xs text-muted mb-2">Format tiap baris (pisahkan dengan Tab atau Koma): <code>Tahun, Penjualan, LabaUsaha, LabaBersih</code></p>
-            <textarea id="txtPasteRows" rows="4" placeholder="2025&#9;207783&#9;73248&#9;56652&#10;2024&#9;199266&#9;78216&#9;59945"></textarea>
-            <button id="btnApplyPaste" type="button" class="btn btn-primary btn-sm mt-2">Terapkan ke Tabel Historis</button>
-          </div>
-          <hr class="divider" />
-          <div>
-            <div class="label-row mb-2">
-              <span class="font-semibold">Opsi B — JSON Emiten Aktif</span>
-              <div class="btn-group">
-                <button id="btnCopyJson" type="button" class="btn btn-secondary btn-sm">Salin JSON</button>
-                <button id="btnLoadJson" type="button" class="btn btn-primary btn-sm">Muat JSON</button>
-              </div>
+            <div class="label-row mb-1">
+              <span class="font-semibold">Tempel Data Keuangan Mentah (Teks Bebas)</span>
+              <button id="btnFillExample" type="button" class="btn btn-ghost btn-sm">Isi Contoh</button>
             </div>
-            <textarea id="txtJsonBox" rows="5" class="mono"></textarea>
+            <p class="text-xs text-muted mb-2">
+              Bebas format (copy-paste dari Stockbit, RTI, Excel, atau ketik manual dengan satuan <code>T</code> / <code>B</code> / <code>M</code>). AI otomatis merapikan urutan tahun, satuan Milyar Rp, ROE, NPM, DER, EPS, dll.
+            </p>
+            <textarea id="txtAiInput" rows="6" placeholder="Contoh:&#10;CMRY&#10;pendapatan tahun 2025 - 2021&#10;10,724 B   9,026 B   7,773 B   6,378 B   4,096 B&#10;&#10;laba usaha&#10;1,980 B   1,671 B   1,428 B   1,256 B   1,007 B&#10;&#10;laba bersih&#10;1,790 B   1,519 B   1,242 B   1,061 B   790 B&#10;&#10;ROE : 26.5% | NPM : 16.7% | DER : 0.05x"></textarea>
           </div>
+
+          <!-- SCREENSHOT DROP / PASTE ZONE -->
+          <div id="dropZone" class="drop-zone" tabindex="0">
+            <input id="inpScreenshotFile" type="file" accept="image/*" class="hidden" />
+            <div id="dropPrompt" class="drop-prompt">
+              <span class="font-semibold">&#128247; Opsional: Tempel Screenshot (<code>Ctrl+V</code>) atau <button id="btnPickImage" type="button" class="link-btn">Pilih Gambar</button></span>
+              <span class="text-xs text-muted">Mendukung screenshot Keystats Stockbit / RTI Business (via Gemini 3.1 Flash)</span>
+            </div>
+            <div id="dropPreviewWrap" class="drop-preview hidden">
+              <img id="imgPreview" alt="Preview screenshot" />
+              <button id="btnClearImage" type="button" class="btn btn-danger btn-sm">Hapus Gambar</button>
+            </div>
+          </div>
+
+          <div class="label-row">
+            <span id="aiEngineHint" class="text-xs text-muted">Hybrid: Gemini 3.1 Flash + Smart Parser Lokal</span>
+            <button id="btnRunAiParse" type="button" class="btn btn-ai">&#10024; Proses &amp; Rapikan Data</button>
+          </div>
+
+          <!-- PREVIEW & CONFIRMATION BOX -->
+          <div id="aiPreviewBox" class="ai-preview hidden">
+            <div class="label-row mb-2">
+              <span class="font-semibold">Hasil Ekstraksi (Preview Sebelum Diterapkan)</span>
+              <span id="aiEngineBadge" class="hint-chip">-</span>
+            </div>
+
+            <div id="aiWarningsBox" class="ai-warnings hidden"></div>
+
+            <div id="aiRatioChips" class="chip-row mb-2 tabular-nums"></div>
+
+            <div id="aiHistoryPreview" class="table-scroll mb-2"></div>
+
+            <div class="btn-group justify-end">
+              <button id="btnApplyAiData" type="button" class="btn btn-primary">Terapkan ke Kalkulator &rarr;</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB JSON BACKUP -->
+        <div id="mpanel-json" class="form-stack hidden">
+          <div class="label-row">
+            <span class="font-semibold">JSON Emiten Aktif (Export / Import)</span>
+            <div class="btn-group">
+              <button id="btnCopyJson" type="button" class="btn btn-secondary btn-sm">Salin JSON</button>
+              <button id="btnLoadJson" type="button" class="btn btn-primary btn-sm">Muat JSON</button>
+            </div>
+          </div>
+          <textarea id="txtJsonBox" rows="9" class="mono"></textarea>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- MODAL: PENGATURAN LIVE DATA (HYBRID) -->
+  <!-- MODAL: PENGATURAN LIVE DATA & AI -->
   <div id="modalLive" class="modal-overlay hidden">
     <div class="modal-card">
       <div class="modal-head">
-        <h3>Pengaturan Sumber Harga &amp; Market Cap Live</h3>
+        <h3>Pengaturan Live Data &amp; AI</h3>
         <button type="button" class="btn btn-ghost btn-sm" data-close="modalLive">Tutup</button>
       </div>
       <div class="modal-body">
         <div class="form-stack">
           <div class="field">
-            <label for="selLiveProvider">Mode Pengambilan Data Pasar</label>
+            <label for="selLiveProvider">Mode Pengambilan Harga Saham</label>
             <select id="selLiveProvider">
-              <option value="hybrid">Hybrid (Otomatis Google Finance Bridge jika diisi, fallback ke Yahoo .JK)</option>
+              <option value="hybrid">Hybrid (Google Finance Bridge jika diisi, fallback ke Yahoo .JK)</option>
               <option value="yahoo">Yahoo Finance Proxy (/api/quote?ticker=...) — Zero Setup</option>
               <option value="gas">Hanya Google Sheets Apps Script Bridge (GOOGLEFINANCE)</option>
             </select>
@@ -709,7 +755,15 @@
             <label for="inpGasUrl">URL Google Apps Script Web App (Opsional)</label>
             <input id="inpGasUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec" />
             <p class="text-xs text-muted mt-1">
-              Kosongkan untuk langsung memakai proxy Vercel (Yahoo Finance <code>.JK</code>). Jika ingin 100% dari rumus <code>=GOOGLEFINANCE()</code> di Google Sheets kamu, salin kode di file <code>apps-script/Code.gs</code> ke Apps Script lalu tempel URL-nya di sini.
+              Kosongkan untuk langsung memakai proxy Vercel (Yahoo Finance <code>.JK</code>). Jika ingin dari rumus <code>=GOOGLEFINANCE()</code>, tempel URL Web App dari <code>apps-script/Code.gs</code>.
+            </p>
+          </div>
+
+          <div class="field">
+            <label for="inpGeminiKey">Gemini API Key (Opsional — Mode Browser/Lokal)</label>
+            <input id="inpGeminiKey" type="password" placeholder="AIza... (kosongkan jika sudah set GEMINI_API_KEY di Vercel)" />
+            <p class="text-xs text-muted mt-1">
+              Untuk produksi yang paling aman, simpan <code>GEMINI_API_KEY</code> (Free Tier Google AI Studio) di Environment Variables Vercel. Kolom ini opsional untuk uji coba cepat.
             </p>
           </div>
 

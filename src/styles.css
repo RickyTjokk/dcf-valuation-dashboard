@@ -444,6 +444,55 @@ input[type="range"] { width: 100%; accent-color: var(--emerald); cursor: pointer
 .modal-body { padding: 18px; max-height: 80vh; overflow-y: auto; }
 .divider { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
 
+.modal-wide { max-width: 680px; }
+.modal-tabs { display: flex; gap: 6px; }
+.modal-tab {
+  padding: 6px 12px; border-radius: 8px; border: 1px solid transparent;
+  background: transparent; color: var(--text-muted); font-size: 13px; font-weight: 600;
+  cursor: pointer; font-family: inherit;
+}
+.modal-tab.active {
+  background: var(--surface-subtle); color: var(--text); border-color: var(--border);
+}
+
+.btn-ai {
+  background: var(--emerald-soft); color: var(--emerald);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+.btn-ai:hover { background: var(--emerald); color: #ffffff; }
+
+input[type="password"] {
+  background: var(--surface-subtle); color: var(--text);
+  border: 1px solid var(--border); border-radius: 9px;
+  padding: 8px 10px; font-size: 13px; font-family: inherit; outline: none;
+}
+input[type="password"]:focus { border-color: var(--emerald); box-shadow: 0 0 0 3px var(--emerald-soft); }
+
+.drop-zone {
+  border: 1.5px dashed var(--border); border-radius: 12px;
+  padding: 12px 14px; background: var(--surface-subtle);
+  text-align: center; transition: border-color 0.15s;
+}
+.drop-zone.dragover { border-color: var(--emerald); background: var(--emerald-soft); }
+.drop-prompt { display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+.link-btn {
+  border: none; background: transparent; color: var(--emerald);
+  font-weight: 700; cursor: pointer; padding: 0; font-size: inherit; text-decoration: underline;
+}
+.drop-preview { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.drop-preview img { max-height: 86px; border-radius: 8px; border: 1px solid var(--border); }
+
+.ai-preview {
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  background: var(--surface-subtle);
+  border-radius: 12px; padding: 14px;
+}
+.ai-warnings {
+  background: var(--amber-soft); color: var(--amber);
+  border: 1px solid rgba(217, 119, 6, 0.25);
+  border-radius: 8px; padding: 8px 10px; font-size: 12px; margin-bottom: 10px;
+}
+
 .toast {
   position: fixed; bottom: 20px; right: 20px; z-index: 90;
   background: var(--primary); color: var(--primary-text);
