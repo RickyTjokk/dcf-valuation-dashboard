@@ -64,3 +64,29 @@ test('V3: Quality Score, Grade A-D, 3 Scenarios, and Stale Data detection', () =
   assert.ok(trapRes.verdict.title.includes('Value Trap'));
 });
 
+test('V5: 2-Stage DDM, Graham Number, and preset DCF parity with includeDdm=false', () => {
+  const bbri = PRESETS.find((p) => p.ticker === 'BBRI');
+  assert.strictEqual(bbri.includeDdm, false);
+  const resOff = computeDCF(bbri);
+  assert.ok(resOff.ddmValue > 0, 'BBRI should calculate reference ddmValue from DPS');
+  assert.ok(resOff.grahamNumber > 0, 'BBRI should calculate Graham Number from EPS & BVPS');
+  const expectedGraham = Math.sqrt(22.5 * resOff.epsBase * bbri.bvps);
+  assert.ok(Math.abs(resOff.grahamNumber - expectedGraham) < 0.01);
+  // With includeDdm=false, fvFinal must equal (iv + rv) / 2 (100% v4 parity)
+  assert.ok(Math.abs(resOff.fvFinal - (resOff.iv + resOff.rv) / 2) < 0.01);
+
+  // When includeDdm=true, fvFinal averages iv, rv, and ddmValue
+  const resOn = computeDCF({ ...bbri, includeDdm: true });
+  const expectedAvg = (resOn.iv + resOn.rv + resOn.ddmValue) / 3;
+  assert.ok(Math.abs(resOn.fvFinal - expectedAvg) < 0.01);
+  // Bear/Bull scenarios should shift DDM growth too when ddmG1 is unset
+  assert.ok(resOn.scenarios.bull.fv > resOn.scenarios.base.fv);
+  assert.ok(resOn.scenarios.base.fv > resOn.scenarios.bear.fv);
+
+  // When DPS=0, enabling includeDdm should gracefully skip DDM in fvFinal
+  const resZeroDps = computeDCF({ ...bbri, dps: 0, includeDdm: true });
+  assert.strictEqual(resZeroDps.ddmValue, 0);
+  assert.ok(Math.abs(resZeroDps.fvFinal - (resZeroDps.iv + resZeroDps.rv) / 2) < 0.01);
+});
+
+

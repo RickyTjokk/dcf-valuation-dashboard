@@ -25,6 +25,7 @@ async function fetchChartFallback(symbol) {
     sharesBillion: null,
     epsTTM: null,
     bvps: null,
+    dividendPerShare: null,
     source: 'yahoo-chart',
   };
 }
@@ -75,6 +76,7 @@ async function fetchFullQuote(symbol) {
     sharesBillion,
     epsTTM: typeof q.epsTrailingTwelveMonths === 'number' ? q.epsTrailingTwelveMonths : null,
     bvps: typeof q.bookValue === 'number' ? q.bookValue : null,
+    dividendPerShare: typeof q.trailingAnnualDividendRate === 'number' ? q.trailingAnnualDividendRate : null,
     source: 'yahoo-quote',
   };
 }

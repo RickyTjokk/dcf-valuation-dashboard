@@ -4,7 +4,7 @@ import { renderTickerLogoHtml } from '../data/tickerLogos.js';
 import { fetchLiveQuote, loadLiveSettings, saveLiveSettings } from '../services/marketApi.js';
 import { smartExtractFinancials, loadLocalGeminiKey, saveLocalGeminiKey } from '../services/smartParser.js';
 import { explainValuationAI } from '../services/aiAdvisor.js';
-import { renderPriceGauge, renderBetaChart, renderDcfChart, renderHistoryChart } from './charts.js';
+import { renderQualityRing, renderPriceGauge, renderBetaChart, renderDcfChart, renderHistoryChart } from './charts.js';
 
 const STORAGE_KEY = 'dcf_lab_watchlist_v2';
 const HIDDEN_PRESETS_KEY = 'dcf_lab_hidden_presets_v4';
@@ -150,6 +150,9 @@ function applyQuoteToState(q, settings) {
   if (settings.syncEpsBvps) {
     if (typeof q.epsTTM === 'number' && q.epsTTM > 0) state.epsTTM = Number(q.epsTTM.toFixed(2));
     if (typeof q.bvps === 'number' && q.bvps > 0) state.bvps = Number(q.bvps.toFixed(2));
+    if (typeof q.dividendPerShare === 'number' && q.dividendPerShare >= 0) {
+      state.dps = Number(q.dividendPerShare.toFixed(2));
+    }
   }
 
   const srcLabel = q.source === 'google-finance' ? 'Live Google' : 'Live IDX';
@@ -269,6 +272,10 @@ function createBlankStock(ticker = 'NEW') {
     optimism: 0.5,
     relMode: 'all',
     includeRel: true,
+    dps: 0,
+    includeDdm: false,
+    ddmG1: null,
+    ddmG2: null,
   };
 }
 
@@ -324,6 +331,13 @@ function syncInputsFromState() {
   document.getElementById('inpPbv3').value = state.pbv3;
   document.getElementById('inpPbv5').value = state.pbv5;
   document.getElementById('inpPbv10').value = state.pbv10;
+
+  document.getElementById('chkIncludeDdm').checked = !!state.includeDdm;
+  document.getElementById('inpDps').value = state.dps ?? 0;
+  document.getElementById('inpDdmG1').value =
+    state.ddmG1 !== null && state.ddmG1 !== undefined ? Number((state.ddmG1 * 100).toFixed(1)) : '';
+  document.getElementById('inpDdmG2').value =
+    state.ddmG2 !== null && state.ddmG2 !== undefined ? Number((state.ddmG2 * 100).toFixed(1)) : '';
 
   renderHistoryTable();
   updateLiveBadge();
@@ -413,27 +427,34 @@ function renderAll() {
     .map((x) => `<div><span>${x.label}</span><span>${x.val > 0 ? fmtRp(x.val) : '-'}</span></div>`)
     .join('');
 
-  // HERO VALUATION VERDICT (2-SIDED: QUALITY GRADE + VALUATION)
-  const gradeEl = document.getElementById('kpiGradeBadge');
-  gradeEl.textContent = res.qualityGrade;
-  if (res.qualityGrade === 'A' || res.qualityGrade === 'B') {
-    gradeEl.style.background = 'var(--emerald-soft)';
-    gradeEl.style.color = 'var(--emerald)';
-  } else if (res.qualityGrade === 'C') {
-    gradeEl.style.background = 'var(--amber-soft)';
-    gradeEl.style.color = 'var(--amber)';
-  } else {
-    gradeEl.style.background = 'var(--rose-soft)';
-    gradeEl.style.color = 'var(--rose)';
-  }
-  document.getElementById('kpiQualityScore').textContent = `${res.qualityScore} / 100`;
+  // Step 2 DDM live stats
+  document.getElementById('dispDivYield').textContent = fmtPct(res.divYield, 2);
+  document.getElementById('dispPayoutRatio').textContent = res.payoutRatio > 0 ? fmtPct(res.payoutRatio, 1) : '-';
+
+  // HERO VALUATION VERDICT (2-SIDED: QUALITY RING + VALUATION)
+  renderQualityRing(document.getElementById('heroQualityRing'), {
+    score: res.qualityScore,
+    grade: res.qualityGrade,
+  });
   document.getElementById('kpiQualityLabel').textContent = res.qualityLabel;
 
-  document.getElementById('heroMethodHint').textContent = state.includeRel ? 'DCF + Relative' : 'Intrinsic Only';
+  const activeNames = ['DCF'];
+  const subParts = [`DCF: ${fmtRp(res.iv)}`];
+  if (state.includeRel && res.rv > 0) {
+    activeNames.push('Relative');
+    subParts.push(`Relative: ${fmtRp(res.rv)}`);
+  }
+  if (state.includeDdm && res.ddmValue > 0) {
+    activeNames.push('DDM');
+    subParts.push(`DDM: ${fmtRp(res.ddmValue)}`);
+  }
+  document.getElementById('heroMethodHint').textContent =
+    activeNames.length > 1 ? activeNames.join(' + ') : 'Intrinsic Only';
   document.getElementById('kpiFV').textContent = fmtRp(res.fvFinal);
-  document.getElementById('kpiFVSub').textContent = state.includeRel
-    ? `Intrinsic: ${fmtRp(res.iv)} · Relative: ${fmtRp(res.rv)}`
-    : `Intrinsic DCF 100Y (Implied P/E ${res.impliedPe.toFixed(1)}x)`;
+  document.getElementById('kpiFVSub').textContent =
+    subParts.length > 1
+      ? subParts.join(' · ')
+      : `Intrinsic DCF 100Y (Implied P/E ${res.impliedPe.toFixed(1)}x)`;
 
   const mosEl = document.getElementById('kpiMoS');
   mosEl.textContent = fmtPct(res.mos, 1);
@@ -515,6 +536,54 @@ function renderAll() {
 }
 
 function renderOverviewOut(res) {
+  // 4-Card Multi-Method Comparison Strip
+  const relActive = !!(state.includeRel && res.rv > 0);
+  const ddmActive = !!(state.includeDdm && res.ddmValue > 0);
+  const gColor =
+    res.grahamNumber > 0
+      ? res.grahamMos >= 0
+        ? 'var(--emerald)'
+        : 'var(--amber)'
+      : 'var(--text-muted)';
+
+  document.getElementById('multiMethodStrip').innerHTML = `
+    <div class="method-card is-active">
+      <div class="method-top">
+        <span class="method-name">DCF 100Y (Intrinsic)</span>
+        <span class="mini-badge emerald">Aktif</span>
+      </div>
+      <div class="method-val tabular-nums">${fmtRp(res.iv)}</div>
+      <div class="method-sub tabular-nums">Implied P/E ${res.impliedPe.toFixed(1)}x &middot; DR ${(res.dr * 100).toFixed(2)}%</div>
+    </div>
+
+    <div class="method-card ${relActive ? 'is-active' : ''}">
+      <div class="method-top">
+        <span class="method-name">Relative PE / PBV</span>
+        <span class="mini-badge ${relActive ? 'emerald' : 'muted'}">${relActive ? 'Aktif' : 'Pembanding'}</span>
+      </div>
+      <div class="method-val tabular-nums">${res.rv > 0 ? fmtRp(res.rv) : '-'}</div>
+      <div class="method-sub tabular-nums">Optimisme ${Math.round((state.optimism ?? 0.5) * 100)}% (${(state.relMode || 'all').toUpperCase()})</div>
+    </div>
+
+    <div class="method-card ${ddmActive ? 'is-active' : ''}">
+      <div class="method-top">
+        <span class="method-name">2-Stage DDM</span>
+        <span class="mini-badge ${ddmActive ? 'emerald' : 'muted'}">${ddmActive ? 'Aktif' : 'Pembanding'}</span>
+      </div>
+      <div class="method-val tabular-nums">${res.ddmValue > 0 ? fmtRp(res.ddmValue) : '-'}</div>
+      <div class="method-sub tabular-nums">${res.dps > 0 ? `DPS ${fmtRp(res.dps)} &middot; Yield ${fmtPct(res.divYield, 1)}` : 'Isi DPS di Step 2'}</div>
+    </div>
+
+    <div class="method-card is-ref" title="Graham Number = √(22.5 × EPS × BVPS). Batas atas harga wajar ala Benjamin Graham (P/E ≤ 15 & PBV ≤ 1.5), hanya sebagai pembanding.">
+      <div class="method-top">
+        <span class="method-name">Graham Number <span class="tip" title="Rumus konservatif Benjamin Graham: √(22.5 × EPS × BVPS). Mengasumsikan batas P/E ≤ 15 dan PBV ≤ 1.5. Tidak ikut dirata-rata ke Harga Wajar Final.">?</span></span>
+        <span class="mini-badge muted">Referensi</span>
+      </div>
+      <div class="method-val tabular-nums" style="color:${gColor}">${res.grahamNumber > 0 ? fmtRp(res.grahamNumber) : '-'}</div>
+      <div class="method-sub tabular-nums">${res.grahamNumber > 0 ? `Batas Graham &middot; MoS ${fmtPct(res.grahamMos, 1)}` : 'Butuh EPS & BVPS > 0'}</div>
+    </div>
+  `;
+
   // 3 Scenarios (Pesimis / Wajar / Optimis)
   if (res.scenarios) {
     const list = [
@@ -539,8 +608,8 @@ function renderOverviewOut(res) {
   }
 
   document.getElementById('overviewKpiChips').innerHTML = `
-    <span class="chip">Intrinsic: <strong>${fmtRp(res.iv)}</strong></span>
-    <span class="chip">Relative: <strong>${state.includeRel ? fmtRp(res.rv) : 'Off'}</strong></span>
+    <span class="chip">DCF: <strong>${fmtRp(res.iv)}</strong></span>
+    ${state.includeDdm && res.ddmValue > 0 ? `<span class="chip">DDM: <strong>${fmtRp(res.ddmValue)}</strong></span>` : ''}
     <span class="chip chip-strong">Final: <strong>${fmtRp(res.fvFinal)}</strong></span>
   `;
 
@@ -594,11 +663,21 @@ function renderOverviewOut(res) {
   const sorted = [...res.factors].sort((a, b) => a.beta - b.beta);
   const strongest = sorted[0];
   const riskiest = sorted[sorted.length - 1];
+  const ddmLine =
+    res.ddmValue > 0
+      ? `<p>&bull; Valuasi Dividen (<strong>2-Stage DDM</strong>): <strong>${fmtRp(res.ddmValue)}</strong> dari DPS <strong>${fmtRp(res.dps)}</strong> (Yield <strong>${fmtPct(res.divYield, 1)}</strong>, Payout <strong>${fmtPct(res.payoutRatio, 0)}</strong>).</p>`
+      : '';
+  const grahamLine =
+    res.grahamNumber > 0
+      ? `<p>&bull; Pembanding <strong>Graham Number</strong>: <strong>${fmtRp(res.grahamNumber)}</strong> (batas aman konservatif ala Benjamin Graham: √(22,5 &times; EPS &times; BVPS)).</p>`
+      : '';
   document.getElementById('diagnosticContent').innerHTML = `
     <p><strong>${state.ticker}</strong> mendapat <strong>Kualitas Grade ${res.qualityGrade} (${res.qualityScore}/100)</strong> dengan <strong>Discount Rate ${(res.dr * 100).toFixed(2)}%</strong>.</p>
     <p>&bull; Faktor terkuat (menekan risiko): <strong>${strongest.label}</strong> (${strongest.fmt(strongest.val)} &rarr; Beta <strong>${strongest.beta.toFixed(2)}</strong>).</p>
     <p>&bull; Faktor paling berisiko (menaikkan discount rate): <strong>${riskiest.label}</strong> (${riskiest.fmt(riskiest.val)} &rarr; Beta <strong>${riskiest.beta.toFixed(2)}</strong>).</p>
     <p>&bull; EPS Dasar <strong>${fmtRp(res.epsBase)}</strong> diproyeksikan tumbuh <strong>${(state.g1 * 100).toFixed(1)}%</strong> (0–10 thn) dan <strong>${(state.g2 * 100).toFixed(1)}%</strong> (&gt;10 thn).</p>
+    ${ddmLine}
+    ${grahamLine}
   `;
 }
 
@@ -1091,6 +1170,24 @@ document.getElementById('inpY2Mult').addEventListener('input', (e) => {
 
 document.getElementById('chkIncludeRel').addEventListener('change', (e) => {
   state.includeRel = e.target.checked;
+  renderAll();
+});
+document.getElementById('chkIncludeDdm').addEventListener('change', (e) => {
+  state.includeDdm = e.target.checked;
+  renderAll();
+});
+document.getElementById('inpDps').addEventListener('input', (e) => {
+  state.dps = Math.max(0, parseFloat(e.target.value) || 0);
+  renderAll();
+});
+document.getElementById('inpDdmG1').addEventListener('input', (e) => {
+  const raw = e.target.value.trim();
+  state.ddmG1 = raw === '' ? null : (parseFloat(raw) || 0) / 100;
+  renderAll();
+});
+document.getElementById('inpDdmG2').addEventListener('input', (e) => {
+  const raw = e.target.value.trim();
+  state.ddmG2 = raw === '' ? null : (parseFloat(raw) || 0) / 100;
   renderAll();
 });
 document.getElementById('rngOptimism').addEventListener('input', (e) => {

@@ -39,6 +39,8 @@ export const PRESETS = [
     optimism: 0.5,
     relMode: 'all',
     includeRel: true,
+    dps: 319,
+    includeDdm: false,
   },
   {
     id: 'BBCA',
@@ -80,6 +82,8 @@ export const PRESETS = [
     optimism: 1.0,
     relMode: 'all',
     includeRel: true,
+    dps: 270,
+    includeDdm: false,
   },
   {
     id: 'CMRY',
@@ -119,6 +123,8 @@ export const PRESETS = [
     optimism: 0.5,
     relMode: 'all',
     includeRel: true,
+    dps: 90,
+    includeDdm: false,
   },
   {
     id: 'KLBF',
@@ -158,6 +164,8 @@ export const PRESETS = [
     optimism: 0.5,
     relMode: 'all',
     includeRel: true,
+    dps: 31,
+    includeDdm: false,
   },
   {
     id: 'CNMA',
@@ -197,6 +205,8 @@ export const PRESETS = [
     optimism: 0.5,
     relMode: 'all',
     includeRel: true,
+    dps: 8,
+    includeDdm: false,
   },
   {
     id: 'BBNI',
@@ -239,6 +249,8 @@ export const PRESETS = [
     optimism: 0.5,
     relMode: 'all',
     includeRel: true,
+    dps: 280,
+    includeDdm: false,
   },
   {
     id: 'BRIS',
@@ -278,6 +290,8 @@ export const PRESETS = [
     optimism: 0.5,
     relMode: 'all',
     includeRel: false,
+    dps: 18,
+    includeDdm: false,
   },
   {
     id: 'ICBP',
@@ -321,6 +335,8 @@ export const PRESETS = [
     optimism: 0.5,
     relMode: 'all',
     includeRel: true,
+    dps: 200,
+    includeDdm: false,
   },
   {
     id: 'TLKM',
@@ -363,6 +379,8 @@ export const PRESETS = [
     optimism: 0.5,
     relMode: 'all',
     includeRel: true,
+    dps: 178,
+    includeDdm: false,
   },
   {
     id: 'SIDO',
@@ -404,6 +422,8 @@ export const PRESETS = [
     optimism: 0.5,
     relMode: 'all',
     includeRel: true,
+    dps: 30,
+    includeDdm: false,
   },
   {
     id: 'ASII',
@@ -446,6 +466,8 @@ export const PRESETS = [
     optimism: 0.5,
     relMode: 'all',
     includeRel: true,
+    dps: 421,
+    includeDdm: false,
   },
   {
     id: 'UNVR',
@@ -488,6 +510,8 @@ export const PRESETS = [
     optimism: 0.5,
     relMode: 'pe',
     includeRel: true,
+    dps: 140,
+    includeDdm: false,
   },
   {
     id: 'MYOR',
@@ -529,6 +553,8 @@ export const PRESETS = [
     optimism: 0.5,
     relMode: 'all',
     includeRel: true,
+    dps: 55,
+    includeDdm: false,
   },
   {
     id: 'ADRO',
@@ -571,6 +597,8 @@ export const PRESETS = [
     optimism: 0.3,
     relMode: 'pbv',
     includeRel: true,
+    dps: 250,
+    includeDdm: false,
   },
   {
     id: 'PTBA',
@@ -613,5 +641,7 @@ export const PRESETS = [
     optimism: 0.5,
     relMode: 'all',
     includeRel: true,
+    dps: 397,
+    includeDdm: false,
   },
 ];

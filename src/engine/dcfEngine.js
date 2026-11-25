@@ -235,7 +235,41 @@ export function computeDCF(s, overrides = {}) {
   if (!relPool.length) relPool = [...peVals, ...pbvVals];
   const rv = relPool.length ? percentileInc(relPool, Number(s.optimism ?? 0.5)) : 0;
 
-  const fvFinal = s.includeRel && rv > 0 ? (iv + rv) / 2 : iv;
+  // 2-Stage Dividend Discount Model (DDM) - 100Y horizon matching DCF
+  const dps = Math.max(0, Number(s.dps) || 0);
+  const ddmG1 =
+    overrides.ddmG1 !== undefined
+      ? Number(overrides.ddmG1)
+      : s.ddmG1 !== null && s.ddmG1 !== undefined && s.ddmG1 !== ''
+        ? Number(s.ddmG1)
+        : Number(s.g1) || 0;
+  const ddmG2 =
+    s.ddmG2 !== null && s.ddmG2 !== undefined && s.ddmG2 !== ''
+      ? Number(s.ddmG2)
+      : Number(s.g2) || 0;
+
+  let ddmValue = 0;
+  if (dps > 0) {
+    let divPrev = dps;
+    for (let i = 1; i <= 100; i++) {
+      const g = i <= 10 ? ddmG1 : ddmG2;
+      const divI = divPrev * (1 + g);
+      ddmValue += divI / Math.pow(1 + safeDr, i);
+      divPrev = divI;
+    }
+  }
+  const divYield = price > 0 ? dps / price : 0;
+  const payoutRatio = epsBase > 0 ? dps / epsBase : 0;
+
+  // Graham Number (Benjamin Graham defensive intrinsic ceiling) — comparison reference only
+  const grahamNumber = epsBase > 0 && bvps > 0 ? Math.sqrt(22.5 * epsBase * bvps) : 0;
+  const grahamMos = grahamNumber > 0 ? 1 - price / grahamNumber : 0;
+
+  // Combined Fair Value: average of DCF + active optional methods (Relative, 2-Stage DDM)
+  const fvComponents = [iv];
+  if (s.includeRel && rv > 0) fvComponents.push(rv);
+  if (s.includeDdm && ddmValue > 0) fvComponents.push(ddmValue);
+  const fvFinal = fvComponents.reduce((a, b) => a + b, 0) / fvComponents.length;
   const mos = fvFinal > 0 ? 1 - price / fvFinal : 0;
   const impliedPe = epsBase > 0 ? iv / epsBase : 0;
 
@@ -299,11 +333,13 @@ export function computeDCF(s, overrides = {}) {
     const baseG1 = Number(s.g1) || 0;
     const bear = computeDCF(s, {
       g1: Math.max(-0.05, baseG1 - 0.03),
+      ddmG1: Math.max(-0.05, ddmG1 - 0.03),
       dr: safeDr + 0.01,
       _skipScenarios: true,
     });
     const bull = computeDCF(s, {
       g1: Math.min(0.4, baseG1 + 0.03),
+      ddmG1: Math.min(0.4, ddmG1 + 0.03),
       dr: Math.max(0.03, safeDr - 0.01),
       _skipScenarios: true,
     });
@@ -338,6 +374,14 @@ export function computeDCF(s, overrides = {}) {
     peItems,
     pbvItems,
     rv,
+    dps,
+    ddmG1,
+    ddmG2,
+    ddmValue,
+    divYield,
+    payoutRatio,
+    grahamNumber,
+    grahamMos,
     fvFinal,
     mos,
     impliedPe,

@@ -113,11 +113,11 @@
       <div class="hero-grid hero-grid-v3">
         <div class="hero-col-quality">
           <div class="eyebrow">Kualitas Bisnis</div>
-          <div class="mos-row">
-            <span id="kpiGradeBadge" class="grade-pill">A</span>
+          <div class="quality-hero-row">
+            <div id="heroQualityRing" class="hero-ring-slot"></div>
             <div>
-              <div id="kpiQualityScore" class="quality-score tabular-nums">80 / 100</div>
-              <div id="kpiQualityLabel" class="hero-sub">Bisnis Sangat Kuat</div>
+              <div id="kpiQualityLabel" class="quality-hero-label">Bisnis Sangat Kuat</div>
+              <div class="hero-sub">6-Faktor Fundamental</div>
             </div>
           </div>
         </div>
@@ -500,6 +500,48 @@
                   <div id="relPbvList" class="mult-out tabular-nums"></div>
                 </div>
               </div>
+
+              <!-- 2-Stage DDM Sub-section -->
+              <div class="ddm-divider"></div>
+              <div class="card-header mb-1" style="margin-bottom:4px">
+                <div>
+                  <h3 class="card-title" style="font-size:14px">2-Stage DDM (Valuasi Dividen) <span class="tip" title="Menghitung nilai sekarang dari dividen 100 tahun (Tahap 1: Tahun 1–10, Tahap 2: Tahun 11–100) dengan Discount Rate CAPM.">?</span></h3>
+                  <p class="card-desc">Cocok untuk saham pembayar dividen rutin (mis. BBRI, BBCA, PTBA, ADRO).</p>
+                </div>
+              </div>
+              <label class="toggle-box">
+                <div>
+                  <div class="font-semibold">Gabungkan 2-Stage DDM ke Harga Wajar</div>
+                  <div class="text-muted text-xs">Jika aktif &amp; DPS &gt; 0, dirata-ratakan bersama DCF (dan Relative jika aktif).</div>
+                </div>
+                <input id="chkIncludeDdm" type="checkbox" />
+              </label>
+
+              <div class="ddm-input-grid">
+                <div class="field">
+                  <label for="inpDps">Dividen / Saham (DPS Rp)</label>
+                  <input id="inpDps" type="number" step="1" min="0" class="tabular-nums" />
+                </div>
+                <div class="stat-card" style="padding:8px 10px">
+                  <div class="stat-label">Div. Yield</div>
+                  <div id="dispDivYield" class="stat-val tabular-nums" style="font-size:15px">0.0%</div>
+                </div>
+                <div class="stat-card" style="padding:8px 10px">
+                  <div class="stat-label">Payout Ratio</div>
+                  <div id="dispPayoutRatio" class="stat-val tabular-nums" style="font-size:15px">0.0%</div>
+                </div>
+              </div>
+
+              <div class="two-fields pro-only">
+                <div class="field">
+                  <label for="inpDdmG1">DDM Growth 0–10 Thn (% <span class="text-xs text-muted">opsional</span>)</label>
+                  <input id="inpDdmG1" type="number" step="0.5" placeholder="Kosong = ikut DCF g1" class="tabular-nums" />
+                </div>
+                <div class="field">
+                  <label for="inpDdmG2">DDM Growth &gt;10 Thn (% <span class="text-xs text-muted">opsional</span>)</label>
+                  <input id="inpDdmG2" type="number" step="0.5" placeholder="Kosong = ikut DCF g2" class="tabular-nums" />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -524,18 +566,34 @@
 
         <!-- OUT 1: OVERVIEW -->
         <div id="panel-out-overview" class="out-panel">
+          <!-- 4-CARD MULTI-METHOD VALUATION STRIP -->
+          <div class="method-strip mb-4" id="multiMethodStrip"></div>
+
           <!-- 3 SCENARIOS: PESIMIS / WAJAR / OPTIMIS -->
           <div class="three-col-grid mb-4" id="scenarioCards"></div>
 
-          <div class="card mb-4">
-            <div class="card-header">
-              <div>
-                <h2 class="card-title">Posisi Harga Saham vs Zona Valuasi</h2>
-                <p class="card-desc">Visualisasi jarak harga pasar saat ini ke zona beli (MoS 50% &amp; 30%) dan harga wajar.</p>
+          <!-- PROPORTIONAL 2-COLUMN BENTO CHARTS -->
+          <div class="bento-grid mb-4">
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <h2 class="card-title">Posisi Harga vs Zona Valuasi</h2>
+                  <p class="card-desc">Jarak harga pasar ke zona beli (MoS 50% &amp; 30%) dan harga wajar.</p>
+                </div>
+                <div id="overviewKpiChips" class="chip-row tabular-nums"></div>
               </div>
-              <div id="overviewKpiChips" class="chip-row tabular-nums"></div>
+              <div id="gaugeContainer" class="chart-wrap"></div>
             </div>
-            <div id="gaugeContainer" class="chart-wrap"></div>
+
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <h3 class="card-title">Tren Pendapatan &amp; Laba Historis</h3>
+                  <p class="card-desc">Pastikan kinerja tumbuh konsisten sebelum masuk meskipun harga diskon.</p>
+                </div>
+              </div>
+              <div id="step3HistoryChart" class="chart-wrap"></div>
+            </div>
           </div>
 
           <div class="two-col-grid mb-4">
@@ -561,16 +619,6 @@
                 <tbody id="sellTargetsTbody"></tbody>
               </table>
             </div>
-          </div>
-
-          <div class="card mb-4">
-            <div class="card-header">
-              <div>
-                <h3 class="card-title">Tren Pendapatan &amp; Laba Historis</h3>
-                <p class="card-desc">Pastikan perusahaan tumbuh konsisten sebelum membeli meskipun harga terlihat diskon.</p>
-              </div>
-            </div>
-            <div id="step3HistoryChart" class="chart-wrap"></div>
           </div>
 
           <div class="card">
@@ -874,8 +922,8 @@
 
           <label class="toggle-box">
             <div>
-              <div class="font-semibold">Ikut Update EPS TTM &amp; BVPS dari Live API</div>
-              <div class="text-xs text-muted">Jika dimatikan, hanya Harga &amp; Market Cap yang diperbarui (EPS TTM/BVPS tetap sesuai input manualmu).</div>
+              <div class="font-semibold">Ikut Update EPS TTM, BVPS &amp; Dividen (DPS) dari Live API</div>
+              <div class="text-xs text-muted">Jika dimatikan, hanya Harga &amp; Market Cap yang diperbarui (EPS, BVPS, dan DPS tetap sesuai input manualmu).</div>
             </div>
             <input id="chkSyncEpsBvps" type="checkbox" />
           </label>
