@@ -780,14 +780,26 @@ body.mode-beginner .pro-only { display: none !important; }
   align-items: stretch;
 }
 
-/* V7 IPHONE / IOS IMMERSIVE POLISH */
+/* V7 & V8 IPHONE / IOS IMMERSIVE & FIT-TO-SCREEN POLISH */
+html, body {
+  overflow-x: clip;
+  max-width: 100%;
+}
+
+.card, .hero-card,
+.two-col-wide > *, .two-col-grid > *, .three-col-grid > *, .bento-grid > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
 button, a, select, input, textarea {
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
 
 .mobile-tab-bar,
-.sheet-handle {
+.sheet-handle,
+.hero-mini-bar {
   display: none;
 }
 
@@ -807,8 +819,8 @@ button, a, select, input, textarea {
 
 @media (max-width: 768px) {
   .app-shell {
-    padding-top: max(12px, env(safe-area-inset-top));
-    padding-bottom: calc(92px + env(safe-area-inset-bottom));
+    padding-top: max(10px, env(safe-area-inset-top));
+    padding-bottom: calc(86px + env(safe-area-inset-bottom));
   }
 
   /* Compact iOS Topbar */
@@ -816,14 +828,54 @@ button, a, select, input, textarea {
     top: max(6px, env(safe-area-inset-top));
     padding: 8px 10px;
     border-radius: 16px;
+    margin-bottom: 10px;
   }
   .brand-text { display: none; }
-  .brand-mark { width: 32px; height: 32px; font-size: 11px; border-radius: 9px; }
+  .brand-mark { width: 30px; height: 30px; font-size: 11px; border-radius: 8px; }
 
   /* Hide desktop stepper; keep compact utility bar */
   .stepper-list { display: none; }
   .stepper-bar { margin-bottom: 10px; }
-  .stepper-utils { width: 100%; justify-content: space-between; }
+  .stepper-utils { width: 100%; justify-content: space-between; gap: 6px; }
+  .stepper-utils .btn { padding: 6px 10px; font-size: 12px; }
+
+  /* Adaptive Hero Card: compact mini strip on Data/Asumsi/Watchlist tabs */
+  .hero-card {
+    padding: 12px 14px;
+    margin-bottom: 12px;
+  }
+  .hero-mini-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .hero-mini-left, .hero-mini-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .hero-mini-chevron {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--emerald);
+    background: var(--emerald-soft);
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+  .hero-card.hero-collapsed .hero-expanded-body {
+    display: none;
+  }
+  .hero-card.hero-step3 .hero-mini-bar {
+    display: none;
+  }
+  .hero-card:not(.hero-collapsed):not(.hero-step3) .hero-mini-bar {
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+    border-bottom: 1px dashed var(--border);
+  }
 
   /* Floating Frosted iOS Bottom Tab Bar */
   .mobile-tab-bar {
@@ -834,15 +886,15 @@ button, a, select, input, textarea {
     right: 0;
     bottom: 0;
     z-index: 55;
-    background: rgba(255, 255, 255, 0.86);
+    background: rgba(255, 255, 255, 0.88);
     backdrop-filter: blur(22px);
     -webkit-backdrop-filter: blur(22px);
     border-top: 1px solid var(--border);
-    padding: 6px 8px calc(8px + env(safe-area-inset-bottom));
+    padding: 5px 8px calc(7px + env(safe-area-inset-bottom));
     box-shadow: 0 -8px 28px rgba(15, 23, 42, 0.08);
   }
   html.dark .mobile-tab-bar {
-    background: rgba(11, 17, 32, 0.86);
+    background: rgba(11, 17, 32, 0.88);
     box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.45);
   }
   .mobile-tab-btn {
@@ -850,7 +902,7 @@ button, a, select, input, textarea {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 3px;
+    gap: 2px;
     min-height: 44px;
     border: none;
     background: transparent;
@@ -863,8 +915,8 @@ button, a, select, input, textarea {
     transition: color 0.15s, background 0.15s, transform 0.12s;
   }
   .mobile-tab-btn svg {
-    width: 20px;
-    height: 20px;
+    width: 19px;
+    height: 19px;
   }
   .mobile-tab-btn.active {
     color: var(--emerald);
@@ -877,24 +929,50 @@ button, a, select, input, textarea {
   .toast {
     left: 16px;
     right: 16px;
-    bottom: calc(80px + env(safe-area-inset-bottom));
+    bottom: calc(76px + env(safe-area-inset-bottom));
     text-align: center;
   }
 }
 
 @media (max-width: 680px) {
   .app-shell {
-    padding-left: 12px;
-    padding-right: 12px;
+    padding-left: 10px;
+    padding-right: 10px;
   }
-  .hero-grid, .hero-grid-v3, .ai-explain-box, .ddm-input-grid, .lynch-stats-grid { grid-template-columns: 1fr; }
-  .two-col-grid, .stat-cards-grid, .two-fields, .meta-grid { grid-template-columns: 1fr; }
-  .step-arrow { display: none; }
-  .picker-wrap { max-width: 100%; flex: 1 1 auto; }
-  .topbar-inner { gap: 8px; }
-  .topbar-actions { width: 100%; justify-content: space-between; }
+  .card {
+    padding: 13px 12px;
+  }
 
-  /* Prevent iOS Safari auto-zoom when focusing inputs */
+  /* Compact 2-row Topbar */
+  .topbar-inner { gap: 7px; }
+  .picker-wrap { max-width: 100%; min-width: 0; flex: 1 1 calc(100% - 40px); }
+  .stock-pill { padding: 6px 10px; font-size: 12.5px; }
+  .live-pill-group { gap: 5px; }
+  .live-pill { padding: 5px 8px; font-size: 12px; }
+  .topbar-actions { flex: 1; justify-content: flex-end; gap: 5px; }
+  .topbar-actions .btn { padding: 6px 9px; font-size: 12px; }
+  .icon-btn { width: 32px; height: 32px; border-radius: 8px; }
+
+  /* Compact 2x2 Hero Card */
+  .hero-grid, .hero-grid-v3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 12px;
+    align-items: start;
+  }
+  .hero-col-quality, .hero-col-main { grid-column: auto; }
+  .hero-col-mos, .hero-col-gauge { grid-column: 1 / -1; }
+  .quality-ring-wrap, .quality-ring-svg { width: 54px; height: 54px; }
+  .quality-hero-row { gap: 8px; }
+  .quality-hero-label { font-size: 12.5px; }
+  .hero-value { font-size: 22px; }
+  .mos-value { font-size: 20px; }
+  .hero-sub { font-size: 11px; }
+  .buy-pills { gap: 4px; }
+  .buy-pill { padding: 4px 7px; font-size: 11px; }
+  .verdict-strip { padding: 8px 10px; font-size: 12px; margin-top: 8px; }
+
+  /* Prevent iOS Safari auto-zoom & prevent intrinsic HTML input size overflow */
   input[type="text"],
   input[type="number"],
   input[type="url"],
@@ -903,44 +981,147 @@ button, a, select, input, textarea {
   select,
   textarea {
     font-size: 16px;
-  }
-
-  /* Horizontal Snap-Scroll Carousels for Multi-Method & Scenarios */
-  .method-strip,
-  #scenarioCards {
-    display: flex;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    -webkit-overflow-scrolling: touch;
-    gap: 10px;
-    padding-bottom: 6px;
-    margin-left: -12px;
-    margin-right: -12px;
-    padding-left: 12px;
-    padding-right: 12px;
-    scrollbar-width: none;
-  }
-  .method-strip::-webkit-scrollbar,
-  #scenarioCards::-webkit-scrollbar {
-    display: none;
-  }
-  .method-strip > .method-card,
-  #scenarioCards > .scenario-card {
-    flex: 0 0 76%;
-    scroll-snap-align: start;
-  }
-
-  /* Subtabs horizontal scroll cleanly */
-  .subtabs {
-    overflow-x: auto;
-    flex-wrap: nowrap;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
+    min-width: 0;
     max-width: 100%;
+    box-sizing: border-box;
   }
-  .subtabs::-webkit-scrollbar { display: none; }
-  .out-tab { white-space: nowrap; flex-shrink: 0; }
+  .field, .field input, .field select, .field textarea {
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* Compact 2-column forms in Step 1 & Step 2 without clipping */
+  .meta-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .meta-grid > .field { min-width: 0; }
+  .meta-grid > .field:nth-child(1),
+  .meta-grid > .field:nth-child(2),
+  .meta-grid > .field:nth-child(5) { grid-column: 1 / -1; }
+  .two-fields { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .two-fields > * { min-width: 0; }
+  .stat-cards-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat-cards-grid > .stat-box { min-width: 0; padding: 10px; }
+  .stat-cards-grid > .stat-box:last-child { grid-column: 1 / -1; }
+  .stat-box .label-row { flex-wrap: wrap; gap: 4px; }
+  .stat-box .mini-badge { font-size: 10px; padding: 1.5px 6px; }
+  .ddm-input-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .ddm-input-grid > .field { grid-column: 1 / -1; }
+  .lynch-stats-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .lynch-stats-grid .stat-label { font-size: 10.5px; }
+  .lynch-stats-grid .stat-val { font-size: 13px !important; }
+  .two-col-grid, .two-col-wide, .ai-explain-box { grid-template-columns: 1fr; gap: 12px; }
+
+  /* Step 1 Income Statement Table: fit 100% inside card with ZERO horizontal overflow */
+  #view-step1 .data-table { table-layout: fixed; width: 100%; font-size: 12px; }
+  #view-step1 .data-table th,
+  #view-step1 .data-table td { padding: 6px 3px; }
+  #view-step1 .data-table th:first-child { width: 54px; }
+  #view-step1 .data-table th:last-child { width: 44px; text-align: right; }
+  #historyTbody input {
+    width: 100% !important;
+    padding: 5px 4px;
+    font-size: 13.5px;
+    border-radius: 7px;
+  }
+
+  /* ALL 5 Multi-Method Cards FIT-TO-SCREEN (2x2 + 1 full-width) — NO horizontal swipe needed */
+  .method-strip {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .method-card { padding: 10px 10px; }
+  .method-card:last-child { grid-column: 1 / -1; }
+  .method-name { font-size: 10px; }
+  .method-val { font-size: 16px; }
+  .method-sub { font-size: 10.5px; }
+
+  /* ALL 3 Scenario Cards FIT-TO-SCREEN (3 compact columns side-by-side) */
+  #scenarioCards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+  .scenario-card { padding: 9px 8px; }
+  .scenario-card .label-row { flex-direction: column; align-items: flex-start; gap: 3px; }
+  .scenario-card .stat-label { font-size: 10.5px; line-height: 1.2; }
+  .scenario-card .mini-badge { font-size: 9.5px; padding: 1px 5px; }
+  .scenario-val { font-size: 14px; margin: 3px 0 1px; }
+  .scenario-card .stat-note { font-size: 10px; line-height: 1.25; }
+
+  /* Step 3 Subtabs as clean 2x2 grid (all 4 tabs visible without scrolling) */
+  .subtab-bar { gap: 8px; }
+  .subtabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+    gap: 4px;
+  }
+  .out-tab {
+    font-size: 11.5px;
+    padding: 7px 6px;
+    text-align: center;
+    white-space: normal;
+    line-height: 1.2;
+  }
+
+  /* Sensitivity 5x5 Matrix & Beta table fit nicely on 393px screen */
+  #matrixContainer .data-table { table-layout: fixed; width: 100%; }
+  #matrixContainer .data-table th,
+  #matrixContainer .data-table td,
+  #matrixContainer .matrix-cell {
+    padding: 5px 2px !important;
+    font-size: 10.5px !important;
+  }
+  #matrixContainer .matrix-cell .text-xs { font-size: 9.5px; }
+
+  /* Watchlist as Native Mobile Stock Cards (NO 9-col table overflow!) */
+  .watchlist-table thead { display: none; }
+  .watchlist-table, .watchlist-table tbody { display: block; width: 100%; }
+  .watchlist-table tr.wl-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px 8px;
+    padding: 11px;
+    margin-bottom: 9px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+  .watchlist-table tr.wl-row.is-current {
+    background: var(--surface-subtle);
+    border-color: rgba(16, 185, 129, 0.45);
+  }
+  .watchlist-table td {
+    border: none !important;
+    padding: 0 !important;
+    text-align: left !important;
+  }
+  .watchlist-table td.wl-col-ticker { grid-column: 1 / 3; }
+  .watchlist-table td.wl-col-actions { grid-column: 3 / 4; justify-self: end; align-self: start; }
+  .watchlist-table td.wl-col-grade { grid-column: 1 / 3; align-self: center; }
+  .watchlist-table td.wl-col-lk { grid-column: 3 / 4; justify-self: end; align-self: center; }
+  .watchlist-table td.wl-col-dr,
+  .watchlist-table td.wl-col-iv { display: none; }
+  .watchlist-table td.wl-col-price,
+  .watchlist-table td.wl-col-fv,
+  .watchlist-table td.wl-col-mos {
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-subtle);
+    padding: 6px 8px !important;
+    border-radius: 8px;
+    font-size: 12.5px;
+    font-weight: 700;
+  }
+  .watchlist-table td.wl-col-price::before,
+  .watchlist-table td.wl-col-fv::before,
+  .watchlist-table td.wl-col-mos::before {
+    content: attr(data-label);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 1px;
+  }
 
   /* Native iOS Bottom Sheet for Modals */
   .modal-overlay {

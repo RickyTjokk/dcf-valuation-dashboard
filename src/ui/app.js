@@ -457,6 +457,20 @@ function renderAll() {
       : 'var(--text-muted)';
   document.getElementById('dispLynchVal').textContent = res.lynchValue > 0 ? fmtRp(res.lynchValue) : '-';
 
+  // Sync Hero Mini Summary Bar (used when collapsed on mobile Step 1/2/Watchlist)
+  const miniGrade = document.getElementById('heroMiniGrade');
+  if (miniGrade) {
+    miniGrade.textContent = `Grade ${res.qualityGrade}`;
+    miniGrade.className = `mini-badge ${
+      res.qualityGrade === 'A' || res.qualityGrade === 'B' ? 'emerald' : res.qualityGrade === 'C' ? 'amber' : 'rose'
+    }`;
+    document.getElementById('heroMiniTicker').textContent = state.ticker || 'NEW';
+    document.getElementById('heroMiniFv').textContent = fmtRp(res.fvFinal);
+    const miniMos = document.getElementById('heroMiniMos');
+    miniMos.textContent = `MoS ${fmtPct(res.mos, 1)}`;
+    miniMos.style.color = res.mos >= 0.3 ? 'var(--emerald)' : res.mos >= 0 ? 'var(--amber)' : 'var(--rose)';
+  }
+
   // HERO VALUATION VERDICT (2-SIDED: QUALITY RING + VALUATION)
   renderQualityRing(document.getElementById('heroQualityRing'), {
     score: res.qualityScore,
@@ -896,8 +910,8 @@ function renderWatchlistOut() {
           : 'rose';
       const isCur = item.id === state.id;
       return `
-        <tr style="cursor:pointer;${isCur ? 'background:var(--surface-subtle);font-weight:700' : ''}" data-loadid="${item.id}" data-iscustom="${item.isCustom}">
-          <td>
+        <tr class="wl-row ${isCur ? 'is-current' : ''}" style="cursor:pointer" data-loadid="${item.id}" data-iscustom="${item.isCustom}">
+          <td class="wl-col-ticker">
             <div class="ticker-cell">
               ${renderTickerLogoHtml(item.ticker, 30)}
               <div>
@@ -910,14 +924,14 @@ function renderWatchlistOut() {
               </div>
             </div>
           </td>
-          <td class="center"><span class="mini-badge ${gTone}">Grade ${r.qualityGrade} (${r.qualityScore})</span></td>
-          <td class="center"><span class="mini-badge ${r.isStaleData ? 'amber' : 'muted'}">LK ${r.dataYear || '-'}</span></td>
-          <td class="num tabular-nums">${fmtRp(item.price)}</td>
-          <td class="num tabular-nums">${(r.dr * 100).toFixed(1)}%</td>
-          <td class="num tabular-nums">${fmtRp(r.iv)}</td>
-          <td class="num tabular-nums">${fmtRp(r.fvFinal)}</td>
-          <td class="num tabular-nums font-bold" style="color:${mosColor}">${(r.mos * 100).toFixed(1)}%</td>
-          <td class="center">
+          <td class="center wl-col-grade"><span class="mini-badge ${gTone}">Grade ${r.qualityGrade} (${r.qualityScore})</span></td>
+          <td class="center wl-col-lk"><span class="mini-badge ${r.isStaleData ? 'amber' : 'muted'}">LK ${r.dataYear || '-'}</span></td>
+          <td class="num tabular-nums wl-col-price" data-label="Pasar">${fmtRp(item.price)}</td>
+          <td class="num tabular-nums wl-col-dr">${(r.dr * 100).toFixed(1)}%</td>
+          <td class="num tabular-nums wl-col-iv">${fmtRp(r.iv)}</td>
+          <td class="num tabular-nums wl-col-fv" data-label="Wajar">${fmtRp(r.fvFinal)}</td>
+          <td class="num tabular-nums font-bold wl-col-mos" data-label="MoS" style="color:${mosColor}">${(r.mos * 100).toFixed(1)}%</td>
+          <td class="center wl-col-actions">
             <div class="action-group">
               <button type="button" class="btn-icon-sm fav-btn ${isFav ? 'active' : ''}" data-favticker="${item.ticker}" title="Favorit">&#9733;</button>
               <button type="button" class="btn-icon-sm" data-editid="${item.id}" data-iscustom="${item.isCustom}" title="Edit Data">&#9998;</button>
@@ -932,8 +946,27 @@ function renderWatchlistOut() {
 // =========================================================================
 // NAVIGATION & EVENTS
 // =========================================================================
+let heroForceExpanded = false;
+function syncHeroCollapse() {
+  const hero = document.getElementById('heroSection');
+  if (!hero) return;
+  const isStep3 = activeStep === 'step3';
+  const shouldCollapse = !isStep3 && !heroForceExpanded;
+  hero.classList.toggle('hero-step3', isStep3);
+  hero.classList.toggle('hero-collapsed', shouldCollapse);
+  const tog = document.getElementById('heroMiniToggle');
+  if (tog) tog.innerHTML = shouldCollapse ? 'Detail &#9662;' : 'Tutup &#9652;';
+}
+
+document.getElementById('heroMiniBar')?.addEventListener('click', () => {
+  heroForceExpanded = !heroForceExpanded;
+  syncHeroCollapse();
+});
+
 function setStep(step, { scroll = false } = {}) {
   activeStep = step;
+  heroForceExpanded = false;
+  syncHeroCollapse();
   document.querySelectorAll('.step-btn, .mobile-tab-btn').forEach((b) => {
     b.classList.toggle('active', b.dataset.step === step);
   });

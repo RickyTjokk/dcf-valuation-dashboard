@@ -114,49 +114,64 @@
       <button id="btnUpdateStaleAi" type="button" class="btn btn-ai btn-sm">&#10024; Update Data via AI</button>
     </div>
 
-    <!-- HERO VALUATION VERDICT BANNER (ALWAYS VISIBLE) -->
-    <section class="hero-card" aria-label="Ringkasan Valuasi Utama">
-      <div class="hero-grid hero-grid-v3">
-        <div class="hero-col-quality">
-          <div class="eyebrow">Kualitas Bisnis</div>
-          <div class="quality-hero-row">
-            <div id="heroQualityRing" class="hero-ring-slot"></div>
-            <div>
-              <div id="kpiQualityLabel" class="quality-hero-label">Bisnis Sangat Kuat</div>
-              <div class="hero-sub">6-Faktor Fundamental</div>
-            </div>
-          </div>
+    <!-- HERO VALUATION VERDICT BANNER (ADAPTIVE COMPACT ON MOBILE) -->
+    <section id="heroSection" class="hero-card" aria-label="Ringkasan Valuasi Utama">
+      <div id="heroMiniBar" class="hero-mini-bar" role="button" tabindex="0" aria-label="Buka ringkasan valuasi">
+        <div class="hero-mini-left">
+          <span id="heroMiniGrade" class="mini-badge emerald">B</span>
+          <strong id="heroMiniTicker">BBRI</strong>
+          <span class="text-muted">&middot;</span>
+          <span id="heroMiniFv" class="tabular-nums font-bold">Rp 5.049</span>
         </div>
-
-        <div class="hero-col-main">
-          <div class="eyebrow">Harga Wajar (Final) <span id="heroMethodHint" class="hint-chip">DCF + Relative</span></div>
-          <div id="kpiFV" class="hero-value tabular-nums">Rp 5.049</div>
-          <div id="kpiFVSub" class="hero-sub tabular-nums">Intrinsic: Rp 5.518 &middot; Relative: Rp 4.580</div>
-        </div>
-
-        <div class="hero-col-mos">
-          <div class="eyebrow">Margin of Safety (Diskon)</div>
-          <div class="mos-row">
-            <span id="kpiMoS" class="mos-value tabular-nums">38.6%</span>
-            <span id="kpiStatusPill" class="status-badge">UNDERVALUED</span>
-          </div>
-          <div id="kpiDRSub" class="hero-sub tabular-nums">Beta Final: 1.02 &middot; Discount Rate: 12.11%</div>
-        </div>
-
-        <div class="hero-col-gauge">
-          <div class="gauge-header">
-            <span class="eyebrow">Posisi Harga vs Nilai Wajar</span>
-            <span id="upsideLabel" class="upside-text tabular-nums">+62.9% Upside</span>
-          </div>
-          <div id="heroGaugeBar" class="mini-gauge-wrap"></div>
-          <div id="heroBuyPills" class="buy-pills tabular-nums mt-2"></div>
+        <div class="hero-mini-right">
+          <span id="heroMiniMos" class="tabular-nums font-bold">38.6%</span>
+          <span id="heroMiniToggle" class="hero-mini-chevron">Detail &#9662;</span>
         </div>
       </div>
 
-      <!-- Anti-Value-Trap Human Verdict Strip -->
-      <div id="heroVerdictStrip" class="verdict-strip mt-3">
-        <strong id="heroVerdictTitle">-</strong>
-        <span id="heroVerdictDesc" class="text-muted">-</span>
+      <div class="hero-expanded-body">
+        <div class="hero-grid hero-grid-v3">
+          <div class="hero-col-quality">
+            <div class="eyebrow">Kualitas Bisnis</div>
+            <div class="quality-hero-row">
+              <div id="heroQualityRing" class="hero-ring-slot"></div>
+              <div>
+                <div id="kpiQualityLabel" class="quality-hero-label">Bisnis Sangat Kuat</div>
+                <div class="hero-sub">6-Faktor Fundamental</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="hero-col-main">
+            <div class="eyebrow">Harga Wajar (Final) <span id="heroMethodHint" class="hint-chip">DCF + Relative</span></div>
+            <div id="kpiFV" class="hero-value tabular-nums">Rp 5.049</div>
+            <div id="kpiFVSub" class="hero-sub tabular-nums">Intrinsic: Rp 5.518 &middot; Relative: Rp 4.580</div>
+          </div>
+
+          <div class="hero-col-mos">
+            <div class="eyebrow">Margin of Safety (Diskon)</div>
+            <div class="mos-row">
+              <span id="kpiMoS" class="mos-value tabular-nums">38.6%</span>
+              <span id="kpiStatusPill" class="status-badge">UNDERVALUED</span>
+            </div>
+            <div id="kpiDRSub" class="hero-sub tabular-nums">Beta Final: 1.02 &middot; Discount Rate: 12.11%</div>
+          </div>
+
+          <div class="hero-col-gauge">
+            <div class="gauge-header">
+              <span class="eyebrow">Posisi Harga vs Nilai Wajar</span>
+              <span id="upsideLabel" class="upside-text tabular-nums">+62.9% Upside</span>
+            </div>
+            <div id="heroGaugeBar" class="mini-gauge-wrap"></div>
+            <div id="heroBuyPills" class="buy-pills tabular-nums mt-2"></div>
+          </div>
+        </div>
+
+        <!-- Anti-Value-Trap Human Verdict Strip -->
+        <div id="heroVerdictStrip" class="verdict-strip mt-3">
+          <strong id="heroVerdictTitle">-</strong>
+          <span id="heroVerdictDesc" class="text-muted">-</span>
+        </div>
       </div>
     </section>
 
@@ -817,7 +832,7 @@
             <button type="button" class="filter-pill" data-wfilter="stale">Data Perlu Update</button>
           </div>
           <div class="table-scroll">
-            <table class="data-table">
+            <table class="data-table watchlist-table">
               <thead>
                 <tr>
                   <th>Ticker</th>
