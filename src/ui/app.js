@@ -4,14 +4,60 @@ import { renderTickerLogoHtml } from '../data/tickerLogos.js';
 import { fetchLiveQuote, loadLiveSettings, saveLiveSettings } from '../services/marketApi.js';
 import { smartExtractFinancials, loadLocalGeminiKey, saveLocalGeminiKey } from '../services/smartParser.js';
 import { explainValuationAI } from '../services/aiAdvisor.js';
+import {
+  LEGACY_KEYS,
+  normTicker,
+  migrateStoredStocks,
+  runStartupMigration,
+  applyPresetOverrides,
+  buildBackup,
+  parseBackup,
+  previewBackupMerge,
+  mergeBackup,
+  toWatchlistCsv,
+  runWithConcurrency,
+  shouldRemindBackup,
+  formatBackupFilename,
+  loadPresetOverrides,
+  savePresetOverrides,
+  clearPresetOverrides,
+  loadSyncMeta,
+  saveSyncMeta,
+  loadLastBackupAt,
+  saveLastBackupAt,
+} from '../services/storage.js';
+import { renderShareCardCanvas, buildPrintReportHtml } from './reportCard.js';
 import { renderQualityRing, renderPriceGauge, renderBetaChart, renderDcfChart, renderHistoryChart } from './charts.js';
 
-const STORAGE_KEY = 'dcf_lab_watchlist_v2';
-const HIDDEN_PRESETS_KEY = 'dcf_lab_hidden_presets_v4';
-const FAVORITES_KEY = 'dcf_lab_favorites_v4';
-const THEME_KEY = 'dcf_lab_theme_v2';
-const MODE_KEY = 'dcf_lab_ui_mode_v3';
+const STORAGE_KEY = LEGACY_KEYS.watchlist;
+const HIDDEN_PRESETS_KEY = LEGACY_KEYS.hiddenPresets;
+const FAVORITES_KEY = LEGACY_KEYS.favorites;
+const THEME_KEY = LEGACY_KEYS.theme;
+const MODE_KEY = LEGACY_KEYS.uiMode;
 const clone = (o) => JSON.parse(JSON.stringify(o));
+
+// Pillar D: Snapshot & non-destructive schema migration BEFORE loading customStocks or state
+runStartupMigration();
+
+let isPersistentStorage = null;
+if (typeof navigator !== 'undefined' && navigator.storage?.persist) {
+  navigator.storage
+    .persist()
+    .then((granted) => {
+      isPersistentStorage = granted;
+      updateWatchlistMetaUi();
+    })
+    .catch(() => {});
+}
+
+function escHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 const fmtRp = (v) => (isFinite(v) ? 'Rp ' + Math.round(v).toLocaleString('id-ID') : '-');
 const fmtNum = (v, d = 2) =>
@@ -19,6 +65,21 @@ const fmtNum = (v, d = 2) =>
     ? Number(v).toLocaleString('id-ID', { minimumFractionDigits: d, maximumFractionDigits: d })
     : '-';
 const fmtPct = (v, d = 1) => (isFinite(v) ? (v * 100).toFixed(d) + '%' : '-');
+
+function fmtTimeShort(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function fmtDateTimeShort(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sep', 'Okt', 'Nov', 'Des'];
+  return `${d.getDate()} ${months[d.getMonth()]} ${fmtTimeShort(iso)}`;
+}
 
 function loadJsonList(key) {
   try {
@@ -43,11 +104,34 @@ const saveWatchlist = (list) => saveJsonList(STORAGE_KEY, list);
 let customStocks = loadWatchlist();
 let hiddenPresetIds = loadJsonList(HIDDEN_PRESETS_KEY);
 let favoriteIds = loadJsonList(FAVORITES_KEY);
+let presetOverrides = loadPresetOverrides();
+let syncMeta = loadSyncMeta();
+let lastBackupAt = loadLastBackupAt();
 let watchlistFilter = 'all';
 let compareIds = ['BBRI', 'BBCA', 'CMRY'];
 
-let state = clone(PRESETS[0]);
-let liveMeta = { status: 'preset', label: 'Preset' }; // 'preset' | 'live' | 'manual' | 'loading' | 'offline'
+let batchSyncAbortController = null;
+let rowSyncStatus = {};
+
+function getEffectivePresets() {
+  return applyPresetOverrides(PRESETS, presetOverrides);
+}
+
+function getAllStocksBoot() {
+  const customTickers = new Set(customStocks.map((c) => normTicker(c.ticker)).filter(Boolean));
+  return [
+    ...customStocks.map((c) => ({ ...c, isCustom: true })),
+    ...getEffectivePresets()
+      .filter((p) => !hiddenPresetIds.includes(p.id) && !customTickers.has(normTicker(p.ticker)))
+      .map((p) => ({ ...p, isCustom: false })),
+  ];
+}
+
+const initialPool = getAllStocksBoot();
+let state = clone(initialPool[0] || PRESETS[0]);
+let liveMeta = state.lastSyncedAt
+  ? { status: 'live', label: `Live ${fmtTimeShort(state.lastSyncedAt)}` }
+  : { status: 'preset', label: state.isCustom ? 'Watchlist' : 'Preset' };
 let activeStep = 'step3';
 let activeOutTab = 'overview';
 let projZoom = 30;
@@ -188,14 +272,7 @@ async function syncLiveTicker(force = true) {
 // SEARCHABLE STOCK PICKER
 // =========================================================================
 function getAllStocks() {
-  const customTickers = new Set(customStocks.map((c) => c.ticker));
-  return [
-    ...customStocks.map((c) => ({ ...c, isCustom: true })),
-    ...PRESETS.filter((p) => !hiddenPresetIds.includes(p.id) && !customTickers.has(p.ticker)).map((p) => ({
-      ...p,
-      isCustom: false,
-    })),
-  ];
+  return getAllStocksBoot();
 }
 
 function renderPickerList(query = '') {
@@ -213,12 +290,12 @@ function renderPickerList(query = '') {
       const active = s.id === state.id ? 'active' : '';
       const yr = s.history?.[0]?.year || '-';
       return `
-        <button type="button" class="picker-item ${active}" data-pickid="${s.id}" data-iscustom="${s.isCustom}">
+        <button type="button" class="picker-item ${active}" data-pickid="${escHtml(s.id)}" data-iscustom="${Boolean(s.isCustom)}">
           <div class="ticker-cell">
             ${renderTickerLogoHtml(s.ticker, 24)}
             <div>
-              <strong>${s.ticker}</strong>${s.isCustom ? CUSTOM_STOCK_ICON : ''}
-              <span class="picker-item-sub">(${yr}) &middot; ${s.name}</span>
+              <strong>${escHtml(s.ticker)}</strong>${s.isCustom ? CUSTOM_STOCK_ICON : ''}
+              <span class="picker-item-sub">(${escHtml(yr)}) &middot; ${escHtml(s.name)}</span>
             </div>
           </div>
           <span class="picker-item-sub tabular-nums">${fmtRp(s.price)}</span>
@@ -230,8 +307,8 @@ function renderPickerList(query = '') {
     const cleanNew = q.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
     if (cleanNew.length >= 2) {
       html += `
-        <button type="button" class="picker-item" data-newticker="${cleanNew}">
-          <div><strong>+ Analisa Ticker Baru: ${cleanNew}</strong></div>
+        <button type="button" class="picker-item" data-newticker="${escHtml(cleanNew)}">
+          <div><strong>+ Analisa Ticker Baru: ${escHtml(cleanNew)}</strong></div>
           <span class="picker-item-sub">Buat &amp; Sync Live</span>
         </button>`;
     }
@@ -366,10 +443,10 @@ function renderHistoryTable() {
       const opm = row.sales > 0 ? (row.op / row.sales) * 100 : 0;
       return `
         <tr>
-          <td><input data-hidx="${idx}" data-field="year" type="number" value="${row.year}" style="width:66px" class="tabular-nums" /></td>
-          <td class="num"><input data-hidx="${idx}" data-field="sales" type="number" step="any" value="${row.sales}" style="width:92px;text-align:right" class="tabular-nums" /></td>
-          <td class="num"><input data-hidx="${idx}" data-field="op" type="number" step="any" value="${row.op}" style="width:86px;text-align:right" class="tabular-nums" /></td>
-          <td class="num"><input data-hidx="${idx}" data-field="ni" type="number" step="any" value="${row.ni}" style="width:86px;text-align:right" class="tabular-nums" /></td>
+          <td><input data-hidx="${idx}" data-field="year" type="number" value="${escHtml(row.year)}" style="width:66px" class="tabular-nums" /></td>
+          <td class="num"><input data-hidx="${idx}" data-field="sales" type="number" step="any" value="${escHtml(row.sales)}" style="width:92px;text-align:right" class="tabular-nums" /></td>
+          <td class="num"><input data-hidx="${idx}" data-field="op" type="number" step="any" value="${escHtml(row.op)}" style="width:86px;text-align:right" class="tabular-nums" /></td>
+          <td class="num"><input data-hidx="${idx}" data-field="ni" type="number" step="any" value="${escHtml(row.ni)}" style="width:86px;text-align:right" class="tabular-nums" /></td>
           <td class="num pro-only"><input data-hidx="${idx}" data-field="inf" type="number" step="0.001" value="${Number(row.inf).toFixed(4)}" style="width:78px;text-align:right" class="tabular-nums" /></td>
           <td class="num text-muted tabular-nums font-semibold">${opm.toFixed(1)}%</td>
         </tr>`;
@@ -658,7 +735,7 @@ function renderOverviewOut(res) {
         <span class="mini-badge ${relActive ? 'emerald' : 'muted'}">${relActive ? 'Aktif' : 'Pembanding'}</span>
       </div>
       <div class="method-val tabular-nums">${res.rv > 0 ? fmtRp(res.rv) : '-'}</div>
-      <div class="method-sub tabular-nums">Optimisme ${Math.round((state.optimism ?? 0.5) * 100)}% (${(state.relMode || 'all').toUpperCase()})</div>
+      <div class="method-sub tabular-nums">Optimisme ${Math.round((state.optimism ?? 0.5) * 100)}% (${escHtml((state.relMode || 'all').toUpperCase())})</div>
     </div>
 
     <div class="method-card ${ddmActive ? 'is-active' : ''}">
@@ -853,7 +930,7 @@ function renderOverviewOut(res) {
       ? `<p>&bull; Pembanding <strong>Graham Number</strong>: <strong>${fmtRp(res.grahamNumber)}</strong> (batas aman konservatif ala Benjamin Graham: √(22,5 &times; EPS &times; BVPS)).</p>`
       : '';
   document.getElementById('diagnosticContent').innerHTML = `
-    <p><strong>${state.ticker}</strong> mendapat <strong>Kualitas Grade ${res.qualityGrade} (${res.qualityScore}/100)</strong> dengan <strong>Discount Rate ${(res.dr * 100).toFixed(2)}%</strong>.</p>
+    <p><strong>${escHtml(state.ticker)}</strong> mendapat <strong>Kualitas Grade ${res.qualityGrade} (${res.qualityScore}/100)</strong> dengan <strong>Discount Rate ${(res.dr * 100).toFixed(2)}%</strong>.</p>
     <p>&bull; Faktor terkuat (menekan risiko): <strong>${strongest.label}</strong> (${strongest.fmt(strongest.val)} &rarr; Beta <strong>${strongest.beta.toFixed(2)}</strong>).</p>
     <p>&bull; Faktor paling berisiko (menaikkan discount rate): <strong>${riskiest.label}</strong> (${riskiest.fmt(riskiest.val)} &rarr; Beta <strong>${riskiest.beta.toFixed(2)}</strong>).</p>
     <p>&bull; EPS Dasar <strong>${fmtRp(res.epsBase)}</strong> diproyeksikan tumbuh <strong>${(state.g1 * 100).toFixed(1)}%</strong> (0–10 thn) dan <strong>${(state.g2 * 100).toFixed(1)}%</strong> (&gt;10 thn).</p>
@@ -1001,7 +1078,7 @@ function renderCompareOut() {
   const poolMap = resolveComparePool();
   const poolList = Array.from(poolMap.values());
   const optionsHtml = poolList
-    .map((s) => `<option value="${s.ticker}">${s.ticker} — ${s.name}</option>`)
+    .map((s) => `<option value="${escHtml(s.ticker)}">${escHtml(s.ticker)} — ${escHtml(s.name)}</option>`)
     .join('');
 
   // Ensure compareIds contains valid tickers, fallback cleanly
@@ -1072,7 +1149,7 @@ function renderCompareOut() {
       (c) => `
       <div class="compare-winner-card ${c.cls}">
         <div class="compare-winner-badge">${c.badge}</div>
-        <div class="compare-winner-ticker">${renderTickerLogoHtml(c.w.ticker, 26)} <strong>${c.w.ticker}</strong></div>
+        <div class="compare-winner-ticker">${renderTickerLogoHtml(c.w.ticker, 26)} <strong>${escHtml(c.w.ticker)}</strong></div>
         <div class="compare-winner-sub tabular-nums">${c.detail(c.w.entry)}</div>
       </div>`
     )
@@ -1141,7 +1218,7 @@ function renderCompareOut() {
       ({ stock }) => `
       <div class="cmp-col-head">
         ${renderTickerLogoHtml(stock.ticker, 22)}
-        <strong>${stock.ticker}</strong>
+        <strong>${escHtml(stock.ticker)}</strong>
       </div>`
     )
     .join('');
@@ -1162,7 +1239,7 @@ function renderCompareOut() {
           const isWinner = bestVal !== null && Math.abs(vals[idx] - bestVal) < 1e-6;
           return `
             <div class="cmp-cell ${isWinner ? 'is-win' : ''}">
-              <span class="cmp-cell-ticker">${x.stock.ticker}</span>
+              <span class="cmp-cell-ticker">${escHtml(x.stock.ticker)}</span>
               <span class="cmp-cell-val tabular-nums">${row.fmt(x)}</span>
               ${isWinner ? '<span class="cmp-win-tag">&#9733; Unggul</span>' : ''}
             </div>`;
@@ -1187,6 +1264,48 @@ function renderCompareOut() {
     </div>`;
 }
 
+function updateWatchlistMetaUi() {
+  const savedInfoEl = document.getElementById('watchlistSavedInfo');
+  const syncGlobalEl = document.getElementById('watchlistSyncGlobal');
+  const remBanner = document.getElementById('backupReminderBanner');
+  const remText = document.getElementById('backupReminderText');
+
+  let latestSavedIso = null;
+  let latestSavedMs = 0;
+  for (const c of customStocks) {
+    const iso = c.lkUpdatedAt || c.savedAt;
+    const ms = iso ? Date.parse(iso) || 0 : 0;
+    if (ms > latestSavedMs) {
+      latestSavedMs = ms;
+      latestSavedIso = iso;
+    }
+  }
+
+  if (savedInfoEl) {
+    const totalCount = getAllStocks().length;
+    const timePart = latestSavedIso ? ` · terakhir disimpan ${fmtDateTimeShort(latestSavedIso)}` : '';
+    savedInfoEl.textContent = `🔒 Data tersimpan: ${customStocks.length} custom / ${totalCount} emiten${timePart}`;
+  }
+
+  if (syncGlobalEl) {
+    if (syncMeta?.lastSyncAllAt) {
+      syncGlobalEl.textContent = `Terakhir sync: ${fmtDateTimeShort(syncMeta.lastSyncAllAt)} (${syncMeta.okCount}/${syncMeta.totalCount} sukses)`;
+    } else {
+      syncGlobalEl.textContent = '';
+    }
+  }
+
+  if (remBanner && remText) {
+    const rem = shouldRemindBackup({ customStocks, lastBackupAt });
+    if (rem.remind) {
+      remBanner.classList.remove('hidden');
+      remText.textContent = `⚠️ Backup terakhir: ${rem.daysAgo} hari lalu`;
+    } else {
+      remBanner.classList.add('hidden');
+    }
+  }
+}
+
 function renderWatchlistOut() {
   const restoreBtn = document.getElementById('btnRestorePresets');
   if (hiddenPresetIds.length > 0) {
@@ -1195,6 +1314,8 @@ function renderWatchlistOut() {
   } else {
     restoreBtn.classList.add('hidden');
   }
+
+  updateWatchlistMetaUi();
 
   let combined = getAllStocks().map((item) => ({
     item,
@@ -1241,38 +1362,52 @@ function renderWatchlistOut() {
           : 'rose';
       const isCur = item.id === state.id;
       const inCmp = compareIds.includes(item.ticker);
+
+      const st = rowSyncStatus[item.ticker];
+      let syncBadgeHtml = '';
+      if (st?.status === 'syncing') {
+        syncBadgeHtml = '<div class="sync-badge syncing">Sync...</div>';
+      } else if (st?.status === 'error') {
+        syncBadgeHtml = '<div class="sync-badge error">&#128992; Gagal &middot; harga lama</div>';
+      } else if (st?.status === 'ok' || item.lastSyncedAt) {
+        const tm = fmtTimeShort(st?.time || item.lastSyncedAt);
+        syncBadgeHtml = `<div class="sync-badge ok">&#128994; Live${tm ? ' ' + tm : ''}</div>`;
+      }
+
       return `
-        <tr class="wl-row ${isCur ? 'is-current' : ''}" style="cursor:pointer" data-loadid="${item.id}" data-iscustom="${item.isCustom}">
+        <tr class="wl-row ${isCur ? 'is-current' : ''}" style="cursor:pointer" data-loadid="${escHtml(item.id)}" data-iscustom="${Boolean(item.isCustom)}">
           <td class="wl-col-ticker">
             <div class="ticker-cell">
               ${renderTickerLogoHtml(item.ticker, 30)}
               <div>
                 <div>
-                  <strong>${item.ticker}</strong>
+                  <strong>${escHtml(item.ticker)}</strong>
                   ${
                     item.isCustom
                       ? '<span class="custom-stock-icon" title="Data simpanan pribadi" aria-label="Data simpanan pribadi"><svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" aria-hidden="true"><path d="M3.5 1.5A1.5 1.5 0 0 1 5 0h6a1.5 1.5 0 0 1 1.5 1.5v13.8a.5.5 0 0 1-.78.41L8 13.1l-3.72 2.61a.5.5 0 0 1-.78-.41V1.5Z"/></svg></span>'
                       : ''
                   }
                 </div>
-                <div class="text-xs text-muted">${item.name}</div>
-                ${item.note ? `<div class="note-line">${item.note}</div>` : ''}
+                <div class="text-xs text-muted">${escHtml(item.name)}</div>
+                ${item.note ? `<div class="note-line">${escHtml(item.note)}</div>` : ''}
               </div>
             </div>
           </td>
           <td class="center wl-col-grade"><span class="mini-badge ${gTone}">Grade ${r.qualityGrade} (${r.qualityScore})</span></td>
-          <td class="center wl-col-lk"><span class="mini-badge ${r.isStaleData ? 'amber' : 'muted'}">LK ${r.dataYear || '-'}</span></td>
-          <td class="num tabular-nums wl-col-price" data-label="Pasar">${fmtRp(item.price)}</td>
+          <td class="center wl-col-lk"><span class="mini-badge ${r.isStaleData ? 'amber' : 'muted'}">LK ${escHtml(r.dataYear || '-')}</span></td>
+          <td class="num tabular-nums wl-col-price" data-label="Pasar">
+            <div>${fmtRp(item.price)}</div>
+            ${syncBadgeHtml}
+          </td>
           <td class="num tabular-nums wl-col-dr">${(r.dr * 100).toFixed(1)}%</td>
           <td class="num tabular-nums wl-col-iv">${fmtRp(r.iv)}</td>
           <td class="num tabular-nums wl-col-fv" data-label="Wajar">${fmtRp(r.fvFinal)}</td>
           <td class="num tabular-nums font-bold wl-col-mos" data-label="MoS" style="color:${mosColor}">${(r.mos * 100).toFixed(1)}%</td>
           <td class="center wl-col-actions">
             <div class="action-group">
-              <button type="button" class="btn-icon-sm vs-btn ${inCmp ? 'active' : ''}" data-vsticker="${item.ticker}" title="Pilih untuk Bandingkan (maks 3)">VS</button>
-              <button type="button" class="btn-icon-sm fav-btn ${isFav ? 'active' : ''}" data-favticker="${item.ticker}" title="Favorit">&#9733;</button>
-              <button type="button" class="btn-icon-sm" data-editid="${item.id}" data-iscustom="${item.isCustom}" title="Edit Data">&#9998;</button>
-              <button type="button" class="btn-icon-sm del-btn" data-delid="${item.id}" data-iscustom="${item.isCustom}" data-delticker="${item.ticker}" title="Hapus dari Watchlist">&#128465;</button>
+              <button type="button" class="btn-icon-sm vs-btn ${inCmp ? 'active' : ''}" data-vsticker="${escHtml(item.ticker)}" title="Pilih untuk Bandingkan (maks 3)">VS</button>
+              <button type="button" class="btn-icon-sm fav-btn ${isFav ? 'active' : ''}" data-favticker="${escHtml(item.ticker)}" title="Favorit">&#9733;</button>
+              <button type="button" class="btn-icon-sm more-btn" data-moreid="${escHtml(item.id)}" data-iscustom="${Boolean(item.isCustom)}" data-moreticker="${escHtml(item.ticker)}" title="Laporan, Edit, Hapus" aria-label="Aksi ${escHtml(item.ticker)}">&#8943;</button>
             </div>
           </td>
         </tr>`;
@@ -1381,10 +1516,12 @@ document.getElementById('pickerList').addEventListener('click', async (e) => {
 
   const id = btn.dataset.pickid;
   const isCust = btn.dataset.iscustom === 'true';
-  const src = isCust ? customStocks.find((c) => c.id === id) : PRESETS.find((p) => p.id === id);
+  const src = isCust ? customStocks.find((c) => c.id === id) : getEffectivePresets().find((p) => p.id === id);
   if (src) {
     state = clone(src);
-    liveMeta = { status: 'preset', label: isCust ? 'Watchlist' : 'Preset' };
+    liveMeta = state.lastSyncedAt
+      ? { status: 'live', label: `Live ${fmtTimeShort(state.lastSyncedAt)}` }
+      : { status: 'preset', label: isCust ? 'Watchlist' : 'Preset' };
     syncInputsFromState();
     renderAll();
     setStep('step3');
@@ -1411,11 +1548,31 @@ document.getElementById('btnNewStock').addEventListener('click', () => {
   showToast('Template emiten baru siap diisi');
 });
 
+function hasLkChanged(prev, next) {
+  if (!prev) return true;
+  const lkFields = ['roe', 'der', 'npm', 'epsTTM', 'bvps', 'dps', 'ocf', 'fcf', 'isBankMode'];
+  for (const k of lkFields) {
+    if ((prev[k] ?? null) !== (next[k] ?? null)) return true;
+  }
+  return JSON.stringify(prev.history || []) !== JSON.stringify(next.history || []);
+}
+
 document.getElementById('btnSaveWatchlist').addEventListener('click', () => {
-  const cleanTicker = (state.ticker || 'NEW').trim().toUpperCase();
+  const cleanTicker = (state.ticker || 'NEW').trim().toUpperCase().replace(/\.JK$/i, '');
   state.ticker = cleanTicker;
-  if (!state.id || !state.id.startsWith('CUSTOM_')) state.id = 'CUSTOM_' + cleanTicker;
-  const idx = customStocks.findIndex((c) => c.id === state.id || c.ticker === cleanTicker);
+
+  const existingById = state.id && state.id.startsWith('CUSTOM_') ? customStocks.find((c) => c.id === state.id) : null;
+  const tickerChanged = existingById && String(existingById.ticker || '').toUpperCase() !== cleanTicker;
+  if (!state.id || !state.id.startsWith('CUSTOM_') || tickerChanged) {
+    state.id = 'CUSTOM_' + cleanTicker;
+  }
+
+  const idx = customStocks.findIndex((c) => c.ticker === cleanTicker || c.id === state.id);
+  const prev = idx >= 0 ? customStocks[idx] : null;
+  const nowIso = new Date().toISOString();
+  state.savedAt = nowIso;
+  state.lkUpdatedAt = hasLkChanged(prev, state) ? nowIso : prev?.lkUpdatedAt || prev?.savedAt || nowIso;
+
   if (idx >= 0) customStocks[idx] = clone(state);
   else customStocks.unshift(clone(state));
   saveWatchlist(customStocks);
@@ -1424,50 +1581,178 @@ document.getElementById('btnSaveWatchlist').addEventListener('click', () => {
 });
 
 document.getElementById('btnReset').addEventListener('click', () => {
-  const orig = PRESETS.find((p) => p.id === state.id) || PRESETS[0];
+  const orig =
+    PRESETS.find((p) => p.id === state.id || 'CUSTOM_' + p.ticker === state.id || p.ticker === state.ticker) ||
+    PRESETS[0];
   state = clone(orig);
   liveMeta = { status: 'preset', label: 'Preset' };
   syncInputsFromState();
   renderAll();
-  showToast(`Data ${state.ticker} di-reset`);
+  showToast(`Data ${state.ticker} di-reset ke default spreadsheet`);
 });
 
-// Batch Refresh Watchlist
+// Pillar A: 1-Click Batch Refresh Watchlist (Max-4 Concurrency + AbortController + Preset Overrides)
 document.getElementById('btnRefreshAllWatchlist').addEventListener('click', async () => {
   const btn = document.getElementById('btnRefreshAllWatchlist');
-  btn.disabled = true;
-  btn.textContent = 'Memperbarui...';
-  const settings = loadLiveSettings();
-  let ok = 0;
+  const syncBar = document.getElementById('watchlistSyncBar');
+  const syncText = document.getElementById('watchlistSyncText');
+  const syncFill = document.getElementById('watchlistSyncFill');
+
+  if (batchSyncAbortController) {
+    batchSyncAbortController.abort();
+    btn.textContent = 'Membatalkan...';
+    btn.disabled = true;
+    return;
+  }
 
   const list = getAllStocks();
+  if (!list.length) {
+    return showToast('Watchlist kosong');
+  }
+
+  batchSyncAbortController = new AbortController();
+  const { signal } = batchSyncAbortController;
+  const settings = loadLiveSettings();
+
+  btn.textContent = 'Batal';
+  btn.classList.add('is-syncing');
+  syncBar?.classList.remove('hidden');
+  if (syncFill) syncFill.style.width = '0%';
+  if (syncText) syncText.textContent = `Sync 0/${list.length}...`;
+
+  rowSyncStatus = {};
   for (const item of list) {
-    try {
-      const q = await fetchLiveQuote(item.ticker, { force: true });
-      const target =
-        customStocks.find((c) => c.id === item.id) || PRESETS.find((p) => p.id === item.id);
-      if (target && typeof q.price === 'number' && q.price > 0) {
-        const oldShares =
-          target.sharesOverride || (target.price > 0 ? (target.marketCap / target.price) * 1000 : 0);
-        target.price = q.price;
-        if (typeof q.marketCapTrillion === 'number' && q.marketCapTrillion > 0) {
-          target.marketCap = Number(q.marketCapTrillion.toFixed(4));
-        } else if (oldShares > 0) {
-          target.marketCap = Number(((q.price * oldShares) / 1000).toFixed(4));
-        }
-        if (settings.syncEpsBvps && typeof q.epsTTM === 'number' && q.epsTTM > 0) {
-          target.epsTTM = Number(q.epsTTM.toFixed(2));
-        }
-        ok++;
+    rowSyncStatus[item.ticker] = { status: 'syncing' };
+  }
+  renderWatchlistOut();
+
+  let okCount = 0;
+  let lastOkTicker = '';
+  let lastFailTicker = '';
+  let activeStatePatched = false;
+
+  const summary = await runWithConcurrency(
+    list,
+    4,
+    async (item) => {
+      const q = await fetchLiveQuote(item.ticker, { force: true, signal });
+      if (!q || typeof q.price !== 'number' || !(q.price > 0)) {
+        throw new Error('Harga kosong');
       }
-    } catch {}
+
+      const nowIso = new Date().toISOString();
+      const oldPrice = Number(item.price) || 0;
+      const oldMcap = Number(item.marketCap) || 0;
+      const oldShares =
+        item.sharesOverride && item.sharesOverride > 0
+          ? Number(item.sharesOverride)
+          : oldPrice > 0 && oldMcap > 0
+          ? (oldMcap / oldPrice) * 1000
+          : 0;
+      const nextMcap =
+        typeof q.marketCapTrillion === 'number' && q.marketCapTrillion > 0
+          ? Number(q.marketCapTrillion.toFixed(4))
+          : oldShares > 0
+          ? Number(((q.price * oldShares) / 1000).toFixed(4))
+          : oldMcap;
+
+      if (item.isCustom) {
+        const target = customStocks.find((c) => c.id === item.id || c.ticker === item.ticker);
+        if (target) {
+          target.price = q.price;
+          target.marketCap = nextMcap;
+          target.lastSyncedAt = nowIso;
+          if (settings.syncEpsBvps) {
+            if (typeof q.epsTTM === 'number' && q.epsTTM > 0) target.epsTTM = Number(q.epsTTM.toFixed(2));
+            if (typeof q.bvps === 'number' && q.bvps > 0) target.bvps = Number(q.bvps.toFixed(2));
+          }
+        }
+      } else {
+        presetOverrides[item.ticker] = {
+          price: q.price,
+          marketCap: nextMcap,
+          ...(typeof q.sharesBillion === 'number' && q.sharesBillion > 0 ? { sharesOut: q.sharesBillion } : {}),
+          lastSyncedAt: nowIso,
+        };
+      }
+
+      // Non-clobbering patch on active Step 1-3 state (preserve unsaved LK & assumptions)
+      if (state && (state.ticker === item.ticker || state.id === item.id)) {
+        state.price = q.price;
+        state.marketCap = nextMcap;
+        state.lastSyncedAt = nowIso;
+        if (item.isCustom && settings.syncEpsBvps) {
+          if (typeof q.epsTTM === 'number' && q.epsTTM > 0) state.epsTTM = Number(q.epsTTM.toFixed(2));
+          if (typeof q.bvps === 'number' && q.bvps > 0) state.bvps = Number(q.bvps.toFixed(2));
+        }
+        liveMeta = { status: 'live', label: `Live ${fmtTimeShort(nowIso)}` };
+        activeStatePatched = true;
+      }
+
+      rowSyncStatus[item.ticker] = { status: 'ok', time: nowIso };
+      return { ticker: item.ticker, price: q.price };
+    },
+    {
+      signal,
+      onProgress: ({ completed, total, item, ok }) => {
+        if (ok) {
+          okCount++;
+          lastOkTicker = item.ticker;
+        } else {
+          rowSyncStatus[item.ticker] = { status: 'error' };
+          lastFailTicker = item.ticker;
+        }
+        const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+        if (syncFill) syncFill.style.width = `${pct}%`;
+        if (syncText) {
+          const parts = [`Sync ${completed}/${total}`];
+          if (lastOkTicker) parts.push(`${lastOkTicker} ✓`);
+          if (lastFailTicker) parts.push(`${lastFailTicker} ✗`);
+          syncText.textContent = parts.join(' · ');
+        }
+        renderWatchlistOut();
+      },
+    }
+  );
+
+  // Clear 'syncing' badge for any remaining aborted rows
+  for (const item of list) {
+    if (rowSyncStatus[item.ticker]?.status === 'syncing') {
+      delete rowSyncStatus[item.ticker];
+    }
   }
 
   if (customStocks.length) saveWatchlist(customStocks);
-  renderAll();
+  savePresetOverrides(presetOverrides);
+  syncMeta = {
+    lastSyncAllAt: new Date().toISOString(),
+    okCount,
+    totalCount: list.length,
+  };
+  saveSyncMeta(syncMeta);
+
+  batchSyncAbortController = null;
   btn.disabled = false;
-  btn.textContent = 'Refresh Semua Harga Live';
-  showToast(ok > 0 ? `${ok} emiten berhasil diperbarui live` : 'Gagal terhubung ke live API');
+  btn.classList.remove('is-syncing');
+  btn.innerHTML = '&#8635; Sync Semua Harga';
+
+  if (activeStatePatched) {
+    syncInputsFromState();
+  }
+  renderAll();
+
+  if (summary.aborted) {
+    showToast(`Sync dibatalkan (${okCount}/${list.length} selesai)`);
+  } else {
+    setTimeout(() => {
+      if (!batchSyncAbortController) syncBar?.classList.add('hidden');
+    }, 3500);
+    showToast(
+      okCount > 0
+        ? `${okCount}/${list.length} emiten berhasil diperbarui live`
+        : 'Gagal terhubung ke live API'
+    );
+  }
 });
 
 // Input Bindings
@@ -1756,57 +2041,27 @@ document.getElementById('watchlistTbody').addEventListener('click', (e) => {
     return;
   }
 
-  const editBtn = e.target.closest('[data-editid]');
-  if (editBtn) {
+  const moreBtn = e.target.closest('[data-moreid]');
+  if (moreBtn) {
     e.stopPropagation();
-    const loadId = editBtn.dataset.editid;
-    const isCust = editBtn.dataset.iscustom === 'true';
-    const src = isCust ? customStocks.find((c) => c.id === loadId) : PRESETS.find((p) => p.id === loadId);
-    if (src) {
-      state = clone(src);
-      liveMeta = { status: 'preset', label: isCust ? 'Watchlist' : 'Preset' };
-      syncInputsFromState();
-      renderAll();
-      setStep('step1');
-      showToast(`Mengedit ${state.ticker} — klik Simpan setelah selesai`);
-    }
+    openRowActionsModal({
+      id: moreBtn.dataset.moreid,
+      isCustom: moreBtn.dataset.iscustom === 'true',
+      ticker: moreBtn.dataset.moreticker,
+    });
     return;
-  }
-
-  const delBtn = e.target.closest('[data-delid]');
-  if (delBtn) {
-    e.stopPropagation();
-    const delId = delBtn.dataset.delid;
-    const delTicker = delBtn.dataset.delticker;
-    const isCust = delBtn.dataset.iscustom === 'true';
-
-    if (isCust) {
-      customStocks = customStocks.filter((c) => c.id !== delId);
-      saveWatchlist(customStocks);
-      // Also hide matching preset if user had overridden a preset
-      const matchPreset = PRESETS.find((p) => p.ticker === delTicker);
-      if (matchPreset && !hiddenPresetIds.includes(matchPreset.id)) {
-        hiddenPresetIds.push(matchPreset.id);
-        saveJsonList(HIDDEN_PRESETS_KEY, hiddenPresetIds);
-      }
-    } else {
-      if (!hiddenPresetIds.includes(delId)) {
-        hiddenPresetIds.push(delId);
-        saveJsonList(HIDDEN_PRESETS_KEY, hiddenPresetIds);
-      }
-    }
-    renderAll();
-    return showToast(`${delTicker} dihapus dari Watchlist`);
   }
 
   const tr = e.target.closest('tr[data-loadid]');
   if (!tr) return;
   const loadId = tr.dataset.loadid;
   const isCust = tr.dataset.iscustom === 'true';
-  const src = isCust ? customStocks.find((c) => c.id === loadId) : PRESETS.find((p) => p.id === loadId);
+  const src = isCust ? customStocks.find((c) => c.id === loadId) : getEffectivePresets().find((p) => p.id === loadId);
   if (src) {
     state = clone(src);
-    liveMeta = { status: 'preset', label: isCust ? 'Watchlist' : 'Preset' };
+    liveMeta = state.lastSyncedAt
+      ? { status: 'live', label: `Live ${fmtTimeShort(state.lastSyncedAt)}` }
+      : { status: 'preset', label: isCust ? 'Watchlist' : 'Preset' };
     syncInputsFromState();
     renderAll();
     setStep('step3');
@@ -1926,15 +2181,15 @@ function renderAiPreview(result) {
   const warnBox = document.getElementById('aiWarningsBox');
   if (d.warnings && d.warnings.length) {
     warnBox.classList.remove('hidden');
-    warnBox.innerHTML = d.warnings.map((w) => `<div>&bull; ${w}</div>`).join('');
+    warnBox.innerHTML = d.warnings.map((w) => `<div>&bull; ${escHtml(w)}</div>`).join('');
   } else {
     warnBox.classList.add('hidden');
   }
 
   const chips = [];
-  if (d.ticker) chips.push(`Ticker: <strong>${d.ticker}</strong>`);
+  if (d.ticker) chips.push(`Ticker: <strong>${escHtml(d.ticker)}</strong>`);
   if (d.price) chips.push(`Harga: <strong>${fmtRp(d.price)}</strong>`);
-  if (d.marketCapTrillion) chips.push(`MCap: <strong>Rp${d.marketCapTrillion}T</strong>`);
+  if (d.marketCapTrillion) chips.push(`MCap: <strong>Rp${escHtml(d.marketCapTrillion)}T</strong>`);
   if (d.roe !== null) chips.push(`ROE: <strong>${(d.roe * 100).toFixed(2)}%</strong>`);
   if (d.npm !== null) chips.push(`NPM: <strong>${(d.npm * 100).toFixed(2)}%</strong>`);
   if (d.der !== null) chips.push(`DER: <strong>${d.der.toFixed(2)}x</strong>`);
@@ -1952,7 +2207,7 @@ function renderAiPreview(result) {
           ${d.history
             .map(
               (h) => `<tr>
-              <td class="font-semibold">${h.year}</td>
+              <td class="font-semibold">${escHtml(h.year)}</td>
               <td class="num">${fmtNum(h.sales, 1)}</td>
               <td class="num">${fmtNum(h.op, 1)}</td>
               <td class="num">${fmtNum(h.ni, 1)}</td>
@@ -2035,8 +2290,12 @@ document.getElementById('btnCopyJson').addEventListener('click', () => {
 document.getElementById('btnLoadJson').addEventListener('click', () => {
   try {
     const obj = JSON.parse(document.getElementById('txtJsonBox').value);
-    if (!obj || !Array.isArray(obj.history)) throw new Error('Invalid');
-    state = obj;
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj) || !Array.isArray(obj.history)) {
+      throw new Error('Invalid');
+    }
+    const [normalized] = migrateStoredStocks([obj]);
+    if (!normalized) throw new Error('Invalid');
+    state = normalized;
     syncInputsFromState();
     renderAll();
     document.getElementById('modalPaste').classList.add('hidden');
@@ -2068,6 +2327,369 @@ document.getElementById('btnSaveLiveSettings').addEventListener('click', () => {
   document.getElementById('modalLive').classList.add('hidden');
   showToast('Pengaturan Live Data & AI disimpan');
 });
+
+document.getElementById('btnResetPresetPrices').addEventListener('click', () => {
+  clearPresetOverrides();
+  presetOverrides = {};
+  for (const p of PRESETS) {
+    if (!customStocks.some((c) => c.ticker === p.ticker)) {
+      delete rowSyncStatus[p.ticker];
+    }
+  }
+  const isCustomActive = customStocks.some((c) => c.id === state.id || c.ticker === state.ticker);
+  if (!isCustomActive) {
+    const rawPreset = PRESETS.find((p) => p.id === state.id || p.ticker === state.ticker);
+    if (rawPreset) {
+      state.price = rawPreset.price;
+      state.marketCap = rawPreset.marketCap;
+      delete state.lastSyncedAt;
+      liveMeta = { status: 'preset', label: 'Preset' };
+      syncInputsFromState();
+    }
+  }
+  renderAll();
+  showToast('Harga semua preset dikembalikan ke default spreadsheet');
+});
+
+// =========================================================================
+// PILLAR B: BACKUP, EXPORT CSV & RESTORE WATCHLIST
+// =========================================================================
+let parsedBackupPreview = null;
+
+function downloadBlobFile(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function updateBackupModalMeta() {
+  const statusEl = document.getElementById('backupModalStorageStatus');
+  const summaryEl = document.getElementById('backupExportSummary');
+  const lastEl = document.getElementById('backupModalLastBackup');
+
+  if (statusEl) {
+    const persistText =
+      isPersistentStorage === true
+        ? 'Penyimpanan permanen: aktif'
+        : isPersistentStorage === false
+        ? 'Penyimpanan permanen: standar browser'
+        : 'Penyimpanan lokal browser aktif';
+    statusEl.textContent = `🔒 ${customStocks.length} saham custom tersimpan · ${Object.keys(presetOverrides).length} harga preset tersinkron · ${persistText}`;
+  }
+
+  if (summaryEl) {
+    summaryEl.textContent = `Berisi ${customStocks.length} saham custom (LK Anda), ${Object.keys(presetOverrides).length} harga preset, ${favoriteIds.length} favorit & pengaturan. Gemini API key tidak disertakan.`;
+  }
+
+  if (lastEl) {
+    lastEl.textContent = lastBackupAt
+      ? `🕒 Backup terakhir: ${fmtDateTimeShort(lastBackupAt)} · Disarankan backup rutin setelah update LK.`
+      : '🕒 Belum ada riwayat backup JSON di perangkat ini · Disarankan backup setelah update LK.';
+  }
+}
+
+function refreshRestorePreview(rawText) {
+  const prevBox = document.getElementById('backupRestorePreview');
+  const applyBtn = document.getElementById('btnApplyBackupRestore');
+  if (!rawText || !rawText.trim()) {
+    parsedBackupPreview = null;
+    prevBox.classList.add('hidden');
+    applyBtn.disabled = true;
+    return;
+  }
+
+  const parsed = parseBackup(rawText);
+  prevBox.classList.remove('hidden');
+  if (!parsed.ok) {
+    parsedBackupPreview = null;
+    prevBox.className = 'backup-preview is-err mt-2';
+    prevBox.textContent = `⚠️ ${parsed.error}`;
+    applyBtn.disabled = true;
+    return;
+  }
+
+  parsedBackupPreview = parsed.backup;
+  const stats = previewBackupMerge(customStocks, parsed.backup.customStocks);
+  const ovCount = Object.keys(parsed.backup.presetOverrides || {}).length;
+  prevBox.className = 'backup-preview is-ok mt-2';
+  prevBox.innerHTML = `✅ Backup valid (schema v${parsed.backup.schemaVersion}) · <strong>${stats.totalIncoming} saham custom</strong> (${stats.added} baru, ${stats.updated} diperbarui, ${stats.skipped} dilewati)${
+    ovCount > 0 ? ` · ${ovCount} harga preset` : ''
+  }.`;
+  applyBtn.disabled = false;
+}
+
+function openBackupModal() {
+  updateBackupModalMeta();
+  document.getElementById('txtBackupImport').value = '';
+  document.getElementById('inpBackupFile').value = '';
+  refreshRestorePreview('');
+  document.getElementById('modalBackup').classList.remove('hidden');
+}
+
+document.getElementById('btnBackupModal').addEventListener('click', openBackupModal);
+document.getElementById('btnQuickBackup').addEventListener('click', openBackupModal);
+
+function createBackupPayloadAndRecord() {
+  const nowIso = new Date().toISOString();
+  const currentTheme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+  const currentUiMode = document.body.classList.contains('mode-beginner') ? 'beginner' : 'pro';
+  const payload = buildBackup({
+    customStocks,
+    presetOverrides,
+    hiddenPresetIds,
+    favoriteIds,
+    uiMode: currentUiMode,
+    theme: currentTheme,
+    liveSettings: loadLiveSettings(),
+    now: nowIso,
+  });
+  return { payload, nowIso, filename: formatBackupFilename(new Date(nowIso)) };
+}
+
+document.getElementById('btnDownloadBackupJson').addEventListener('click', () => {
+  const { payload, nowIso, filename } = createBackupPayloadAndRecord();
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  downloadBlobFile(blob, filename);
+  lastBackupAt = nowIso;
+  saveLastBackupAt(nowIso);
+  updateBackupModalMeta();
+  renderWatchlistOut();
+  showToast(`Backup ${filename} diunduh`);
+});
+
+document.getElementById('btnShareBackupJson').addEventListener('click', async () => {
+  const { payload, nowIso, filename } = createBackupPayloadAndRecord();
+  const jsonStr = JSON.stringify(payload, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json' });
+  const file = new File([blob], filename, { type: 'application/json' });
+
+  let shared = false;
+  if (typeof navigator !== 'undefined' && navigator.canShare?.({ files: [file] }) && navigator.share) {
+    try {
+      await navigator.share({ files: [file], title: 'Backup Watchlist DCF Lab' });
+      shared = true;
+    } catch (err) {
+      if (err?.name === 'AbortError') return;
+    }
+  }
+
+  if (!shared) {
+    downloadBlobFile(blob, filename);
+  }
+  lastBackupAt = nowIso;
+  saveLastBackupAt(nowIso);
+  updateBackupModalMeta();
+  renderWatchlistOut();
+  showToast(shared ? 'Backup dibagikan' : `Backup ${filename} diunduh`);
+});
+
+document.getElementById('btnDownloadWatchlistCsv').addEventListener('click', () => {
+  const csv = toWatchlistCsv(getAllStocks(), computeDCF);
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+  const pad = (n) => String(n).padStart(2, '0');
+  const d = new Date();
+  const fname = `dcf-watchlist-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}.csv`;
+  downloadBlobFile(blob, fname);
+  showToast(`CSV ${fname} diunduh`);
+});
+
+document.getElementById('btnPickBackupFile').addEventListener('click', () => {
+  document.getElementById('inpBackupFile').click();
+});
+
+document.getElementById('inpBackupFile').addEventListener('change', (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const text = String(reader.result || '');
+    document.getElementById('txtBackupImport').value = text;
+    refreshRestorePreview(text);
+  };
+  reader.readAsText(file);
+});
+
+document.getElementById('txtBackupImport').addEventListener('input', (e) => {
+  refreshRestorePreview(e.target.value);
+});
+
+document.getElementById('btnApplyBackupRestore').addEventListener('click', () => {
+  if (!parsedBackupPreview) return;
+  const mode = document.querySelector('input[name="backupRestoreMode"]:checked')?.value === 'replace' ? 'replace' : 'merge';
+
+  const result = mergeBackup({
+    currentCustomStocks: customStocks,
+    incomingCustomStocks: parsedBackupPreview.customStocks,
+    currentPresetOverrides: presetOverrides,
+    incomingPresetOverrides: parsedBackupPreview.presetOverrides,
+    currentHiddenPresetIds: hiddenPresetIds,
+    incomingHiddenPresetIds: parsedBackupPreview.hiddenPresetIds,
+    currentFavoriteIds: favoriteIds,
+    incomingFavoriteIds: parsedBackupPreview.favoriteIds,
+    mode,
+  });
+
+  customStocks = result.customStocks;
+  presetOverrides = result.presetOverrides;
+  hiddenPresetIds = result.hiddenPresetIds;
+  favoriteIds = result.favoriteIds;
+
+  saveWatchlist(customStocks);
+  savePresetOverrides(presetOverrides);
+  saveJsonList(HIDDEN_PRESETS_KEY, hiddenPresetIds);
+  saveJsonList(FAVORITES_KEY, favoriteIds);
+
+  if (mode === 'replace') {
+    applyTheme(parsedBackupPreview.theme);
+    applyUiMode(parsedBackupPreview.uiMode);
+    if (parsedBackupPreview.liveSettings) {
+      saveLiveSettings(parsedBackupPreview.liveSettings);
+    }
+  }
+
+  // Refresh active state if its ticker exists in restored pool
+  const refreshed = getAllStocks().find((s) => s.ticker === state.ticker || s.id === state.id);
+  if (refreshed) {
+    state = clone(refreshed);
+    liveMeta = state.lastSyncedAt
+      ? { status: 'live', label: `Live ${fmtTimeShort(state.lastSyncedAt)}` }
+      : { status: 'preset', label: state.isCustom ? 'Watchlist' : 'Preset' };
+    syncInputsFromState();
+  }
+
+  renderAll();
+  document.getElementById('modalBackup').classList.add('hidden');
+  showToast(
+    mode === 'replace'
+      ? `Restore selesai: ${customStocks.length} saham custom dimuat`
+      : `Restore digabung: +${result.summary.added} baru, ${result.summary.updated} diperbarui`
+  );
+});
+
+// =========================================================================
+// PILLAR C: LAPORAN RINGKAS (PDF A4 & SHAREABLE CARD) + ROW ACTIONS (...)
+// =========================================================================
+let activeReportStock = null;
+let activeReportRes = null;
+let rowActionTarget = null;
+
+function resolveStockTarget({ id, isCustom, ticker }) {
+  if (isCustom) {
+    return customStocks.find((c) => c.id === id || c.ticker === ticker) || null;
+  }
+  return getEffectivePresets().find((p) => p.id === id || p.ticker === ticker) || null;
+}
+
+function openRowActionsModal(target) {
+  rowActionTarget = target;
+  document.getElementById('rowActionsTitle').textContent = `Aksi — ${target.ticker}`;
+  document.getElementById('modalRowActions').classList.remove('hidden');
+}
+
+function openReportModal(stockItem) {
+  if (!stockItem) return;
+  activeReportStock = clone(stockItem);
+  activeReportRes = computeDCF(activeReportStock);
+
+  const ticker = String(activeReportStock.ticker || 'IDX').toUpperCase();
+  document.getElementById('reportModalTitle').textContent = `📄 Laporan Ringkas — ${ticker}`;
+  document.getElementById('reportStockSummary').textContent = `${ticker} (${activeReportStock.name || ticker}) · FV ${fmtRp(activeReportRes.fvFinal)} · MoS ${fmtPct(activeReportRes.mos, 1)}`;
+
+  const currentTheme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+  const canvas = document.getElementById('shareCardCanvas');
+  renderShareCardCanvas(canvas, activeReportStock, activeReportRes, { theme: currentTheme });
+
+  document.getElementById('modalReport').classList.remove('hidden');
+}
+
+document.getElementById('btnOpenReport').addEventListener('click', () => {
+  openReportModal(state);
+});
+
+document.getElementById('btnRowActionReport').addEventListener('click', () => {
+  if (!rowActionTarget) return;
+  const src = resolveStockTarget(rowActionTarget);
+  document.getElementById('modalRowActions').classList.add('hidden');
+  if (src) openReportModal({ ...src, isCustom: rowActionTarget.isCustom });
+});
+
+document.getElementById('btnRowActionEdit').addEventListener('click', () => {
+  if (!rowActionTarget) return;
+  const src = resolveStockTarget(rowActionTarget);
+  document.getElementById('modalRowActions').classList.add('hidden');
+  if (src) {
+    state = clone(src);
+    liveMeta = state.lastSyncedAt
+      ? { status: 'live', label: `Live ${fmtTimeShort(state.lastSyncedAt)}` }
+      : { status: 'preset', label: rowActionTarget.isCustom ? 'Watchlist' : 'Preset' };
+    syncInputsFromState();
+    renderAll();
+    setStep('step1');
+    showToast(`Mengedit ${state.ticker} — klik Simpan setelah selesai`);
+  }
+});
+
+document.getElementById('btnRowActionDelete').addEventListener('click', () => {
+  if (!rowActionTarget) return;
+  const { id: delId, ticker: delTicker, isCustom: isCust } = rowActionTarget;
+  document.getElementById('modalRowActions').classList.add('hidden');
+
+  if (isCust) {
+    customStocks = customStocks.filter((c) => c.id !== delId);
+    saveWatchlist(customStocks);
+    const matchPreset = PRESETS.find((p) => p.ticker === delTicker);
+    if (matchPreset && !hiddenPresetIds.includes(matchPreset.id)) {
+      hiddenPresetIds.push(matchPreset.id);
+      saveJsonList(HIDDEN_PRESETS_KEY, hiddenPresetIds);
+    }
+  } else {
+    if (!hiddenPresetIds.includes(delId)) {
+      hiddenPresetIds.push(delId);
+      saveJsonList(HIDDEN_PRESETS_KEY, hiddenPresetIds);
+    }
+  }
+  renderAll();
+  showToast(`${delTicker} dihapus dari Watchlist`);
+});
+
+document.getElementById('btnPrintReportPdf').addEventListener('click', () => {
+  if (!activeReportStock || !activeReportRes) return;
+  const container = document.getElementById('printReport');
+  container.innerHTML = buildPrintReportHtml(activeReportStock, activeReportRes);
+  window.print();
+});
+
+function exportReportCardPng(preferShare = false) {
+  const canvas = document.getElementById('shareCardCanvas');
+  if (!canvas || !activeReportStock) return;
+  const ticker = String(activeReportStock.ticker || 'IDX').toUpperCase();
+  const filename = `${ticker}-dcf-card.png`;
+
+  canvas.toBlob(async (blob) => {
+    if (!blob) return showToast('Gagal membuat gambar PNG');
+    if (preferShare && typeof navigator !== 'undefined' && navigator.share) {
+      const file = new File([blob], filename, { type: 'image/png' });
+      if (navigator.canShare?.({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: `Valuasi ${ticker} — DCF Lab` });
+          return;
+        } catch (err) {
+          if (err?.name === 'AbortError') return;
+        }
+      }
+    }
+    downloadBlobFile(blob, filename);
+    showToast(`Card ${filename} disimpan`);
+  }, 'image/png');
+}
+
+document.getElementById('btnShareReportCard').addEventListener('click', () => exportReportCardPng(true));
+document.getElementById('btnDownloadReportCard').addEventListener('click', () => exportReportCardPng(false));
 
 // V3: Stale Data Update Button
 document.getElementById('btnUpdateStaleAi').addEventListener('click', () => openAiModal('ai'));
@@ -2113,20 +2735,20 @@ document.getElementById('btnExplainAi').addEventListener('click', async () => {
     box.classList.remove('hidden');
     box.innerHTML = `
       <div class="ai-explain-item">
-        <h4>1. Kesimpulan Cepat (${out.model})</h4>
-        <p>${out.data.summary}</p>
+        <h4>1. Kesimpulan Cepat (${escHtml(out.model)})</h4>
+        <p>${escHtml(out.data.summary)}</p>
       </div>
       <div class="ai-explain-item">
         <h4>2. Kekuatan Bisnis</h4>
-        <p>${out.data.strengths}</p>
+        <p>${escHtml(out.data.strengths)}</p>
       </div>
       <div class="ai-explain-item">
         <h4>3. Risiko yang Perlu Dicek</h4>
-        <p>${out.data.risks}</p>
+        <p>${escHtml(out.data.risks)}</p>
       </div>
       <div class="ai-explain-item">
         <h4>4. Langkah Selanjutnya</h4>
-        <p>${out.data.nextSteps}</p>
+        <p>${escHtml(out.data.nextSteps)}</p>
       </div>
     `;
   } catch (err) {

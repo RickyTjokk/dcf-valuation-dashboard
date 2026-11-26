@@ -2,9 +2,19 @@
  * Crisp inline SVG Visualizations for DCF Valuation Lab v5
  */
 
+function escHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export function renderQualityRing(container, { score, grade }) {
   if (!container) return;
   const s = Math.max(0, Math.min(100, Number(score) || 0));
+  const safeGrade = escHtml(grade ?? '-');
   const r = 34;
   const c = 2 * Math.PI * r;
   const dashOffset = c * (1 - s / 100);
@@ -16,8 +26,8 @@ export function renderQualityRing(container, { score, grade }) {
       : 'var(--rose)';
 
   container.innerHTML = `
-    <div class="quality-ring-wrap" title="Skor Kualitas Fundamental: ${s}/100 (Grade ${grade})">
-      <svg viewBox="0 0 84 84" class="quality-ring-svg" role="img" aria-label="Skor Kualitas Bisnis ${s} dari 100, Grade ${grade}">
+    <div class="quality-ring-wrap" title="Skor Kualitas Fundamental: ${s}/100 (Grade ${safeGrade})">
+      <svg viewBox="0 0 84 84" class="quality-ring-svg" role="img" aria-label="Skor Kualitas Bisnis ${s} dari 100, Grade ${safeGrade}">
         <circle cx="42" cy="42" r="${r}" fill="none" stroke="var(--surface-subtle)" stroke-width="7" />
         <circle
           cx="42" cy="42" r="${r}"
@@ -30,7 +40,7 @@ export function renderQualityRing(container, { score, grade }) {
           transform="rotate(-90 42 42)"
           class="quality-ring-arc"
         />
-        <text x="42" y="41" text-anchor="middle" fill="${strokeColor}" font-size="22" font-weight="800" font-family="inherit">${grade}</text>
+        <text x="42" y="41" text-anchor="middle" fill="${strokeColor}" font-size="22" font-weight="800" font-family="inherit">${safeGrade}</text>
         <text x="42" y="57" text-anchor="middle" fill="var(--text-muted)" font-size="11" font-weight="700" font-family="inherit">${s}/100</text>
       </svg>
     </div>
@@ -113,7 +123,7 @@ export function renderBetaChart(container, { factors, betaAvg, betaFinal, betaAd
     const y = topPad + idx * rowH;
     const xEnd = toX(f.beta);
     const color = f.beta <= 0.75 ? 'var(--emerald)' : f.beta <= 1.25 ? 'var(--amber)' : 'var(--rose)';
-    svg += `<text x="${leftPad - 8}" y="${y + 16}" text-anchor="end" fill="var(--text)" font-size="11.5" font-weight="500">${f.label}</text>`;
+    svg += `<text x="${leftPad - 8}" y="${y + 16}" text-anchor="end" fill="var(--text)" font-size="11.5" font-weight="500">${escHtml(f.label)}</text>`;
     svg += `<rect x="${leftPad}" y="${y + 5}" width="${barW}" height="14" rx="5" fill="var(--surface-subtle)" />`;
     svg += `<rect x="${leftPad}" y="${y + 5}" width="${Math.max(6, xEnd - leftPad)}" height="14" rx="5" fill="${color}" opacity="0.88" />`;
     svg += `<text x="${width - 6}" y="${y + 16}" text-anchor="end" fill="var(--text)" font-size="11.5" font-weight="700">${f.beta.toFixed(2)}</text>`;
@@ -211,7 +221,7 @@ export function renderDcfChart(container, { rows, projZoom, fmtRp }) {
     dotPv.setAttribute('cy', yOf(r.pv));
     tip.classList.remove('hidden');
     tip.innerHTML = `
-      <span><strong>Tahun ${r.year}</strong></span>
+      <span><strong>Tahun ${escHtml(r.year)}</strong></span>
       <span>FV EPS: <strong>${fmtRp(r.fv)}</strong></span>
       <span>PV EPS: <strong>${fmtRp(r.pv)}</strong></span>
       <span>Kumulatif PV: <strong>${fmtRp(r.cumPv)}</strong></span>
@@ -327,7 +337,7 @@ export function renderHistoryChart(container, { history }) {
         <rect class="hist-bar" data-metric="sales" x="${xSales}" y="${yZero - hSales}" width="${barW}" height="${hSales}" rx="3" fill="var(--primary)" opacity="${opSales}" />
         <rect class="hist-bar" data-metric="op" x="${xOp}" y="${yZero - hOp}" width="${barW}" height="${hOp}" rx="3" fill="var(--amber)" opacity="${opOp}" />
         <rect class="hist-bar" data-metric="ni" x="${xNi}" y="${yZero - hNi}" width="${barW}" height="${hNi}" rx="3" fill="${(r.ni || 0) >= 0 ? 'var(--emerald)' : 'var(--rose)'}" opacity="${opNi}" />
-        <text x="${cx}" y="${H - 7}" text-anchor="middle" fill="var(--text-muted)" font-size="10.5" font-weight="600">${r.year}</text>
+        <text x="${cx}" y="${H - 7}" text-anchor="middle" fill="var(--text-muted)" font-size="10.5" font-weight="600">${escHtml(r.year)}</text>
       </g>
     `;
   });
@@ -423,7 +433,7 @@ export function renderHistoryChart(container, { history }) {
         : '';
     tip.classList.remove('hidden');
     tip.innerHTML = `
-      <span><strong>Tahun ${r.year}</strong></span>
+      <span><strong>Tahun ${escHtml(r.year)}</strong></span>
       <span>Penjualan: <strong>${Math.round(r.sales).toLocaleString('id-ID')} M</strong></span>
       <span>Laba Usaha: <strong>${Math.round(r.op).toLocaleString('id-ID')} M</strong> (OPM ${opm}%)</span>
       <span>Laba Bersih: <strong>${Math.round(r.ni).toLocaleString('id-ID')} M</strong> (NPM ${npm}%)</span>

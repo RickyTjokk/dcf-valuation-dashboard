@@ -644,7 +644,10 @@
             <button type="button" class="out-tab" data-outtab="matrix">Matriks Sensitivitas 5&times;5</button>
             <button type="button" class="out-tab" data-outtab="compare">Bandingkan (<span id="compareTabCount">3</span>)</button>
           </div>
-          <button type="button" class="btn btn-ghost btn-sm next-step-btn" data-goto="step2">Ubah Asumsi</button>
+          <div class="subtab-actions btn-group">
+            <button id="btnOpenReport" type="button" class="btn btn-secondary btn-sm">&#128196; Laporan</button>
+            <button type="button" class="btn btn-ghost btn-sm next-step-btn" data-goto="step2">Ubah Asumsi</button>
+          </div>
         </div>
 
         <!-- OUT 1: OVERVIEW -->
@@ -871,11 +874,12 @@
           <div class="card-header">
             <div>
               <h2 class="card-title">Watchlist &amp; Perbandingan Emiten</h2>
-              <p class="card-desc">Klik baris untuk buka analisa, <strong>VS</strong> untuk adu 2–3 saham, &#9733; favorit, atau &#9998; edit data.</p>
+              <p class="card-desc">Klik baris untuk buka analisa, <strong>VS</strong> untuk adu 2–3 saham, &#9733; favorit, atau <strong>&#8943;</strong> untuk laporan/edit/hapus.</p>
             </div>
-            <div class="btn-group">
+            <div class="btn-group wl-header-actions">
               <button id="btnRestorePresets" type="button" class="btn btn-ghost btn-sm hidden">Pulihkan Preset</button>
-              <button id="btnRefreshAllWatchlist" type="button" class="btn btn-secondary">Refresh Semua Harga Live</button>
+              <button id="btnBackupModal" type="button" class="btn btn-secondary">&#128190; Backup &amp; Restore</button>
+              <button id="btnRefreshAllWatchlist" type="button" class="btn btn-primary">&#8635; Sync Semua Harga</button>
               <select id="selSortWatchlist">
                 <option value="mosDesc">Urutkan: MoS Tertinggi</option>
                 <option value="ret5yDesc">Urutkan: Expected Return 5Y</option>
@@ -884,6 +888,25 @@
                 <option value="tickerAsc">Urutkan: Ticker A–Z</option>
               </select>
             </div>
+          </div>
+
+          <div id="watchlistSyncBar" class="sync-progress-wrap hidden mb-3" aria-live="polite">
+            <div class="sync-progress-head">
+              <span id="watchlistSyncText" class="text-xs font-semibold tabular-nums">Sync 0/0</span>
+            </div>
+            <div class="sync-progress-track">
+              <div id="watchlistSyncFill" class="sync-progress-fill" style="width:0%"></div>
+            </div>
+          </div>
+
+          <div id="watchlistMetaBar" class="watchlist-meta-bar mb-3">
+            <span id="watchlistSavedInfo" class="wl-meta-item">&#128274; Data tersimpan: 0 emiten</span>
+            <span id="watchlistSyncGlobal" class="wl-meta-item text-muted"></span>
+          </div>
+
+          <div id="backupReminderBanner" class="backup-reminder-banner hidden mb-3">
+            <span id="backupReminderText">&#9888;&#65039; Backup terakhir: -</span>
+            <button id="btnQuickBackup" type="button" class="link-btn">Backup sekarang</button>
           </div>
 
           <div class="watchlist-filters mb-3">
@@ -1049,9 +1072,124 @@
             <input id="chkSyncEpsBvps" type="checkbox" />
           </label>
 
-          <div class="btn-group justify-end pt-2">
+          <div class="btn-group justify-between-wrap pt-2">
+            <button id="btnResetPresetPrices" type="button" class="btn btn-ghost btn-sm">Reset Harga Preset ke Default Spreadsheet</button>
             <button id="btnSaveLiveSettings" type="button" class="btn btn-primary">Simpan Pengaturan</button>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: BACKUP, EXPORT & RESTORE WATCHLIST -->
+  <div id="modalBackup" class="modal-overlay hidden">
+    <div class="modal-card modal-wide">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="modal-head">
+        <h3>&#128190; Backup &amp; Restore Watchlist</h3>
+        <button type="button" class="btn btn-ghost btn-sm" data-close="modalBackup">Tutup</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-stack">
+          <div id="backupModalStorageStatus" class="backup-status-strip text-xs"></div>
+
+          <div class="two-col-grid">
+            <div class="backup-card">
+              <div class="font-semibold mb-1">&#128230; Backup Semua (JSON)</div>
+              <p id="backupExportSummary" class="text-xs text-muted mb-2">Menyimpan semua saham custom (LK), harga preset tersinkron, favorit, preset tersembunyi &amp; pengaturan. Gemini API key tidak disertakan.</p>
+              <div class="btn-group">
+                <button id="btnDownloadBackupJson" type="button" class="btn btn-primary btn-sm">&#128190; Download JSON</button>
+                <button id="btnShareBackupJson" type="button" class="btn btn-secondary btn-sm">&#128228; Share Backup</button>
+              </div>
+            </div>
+
+            <div class="backup-card">
+              <div class="font-semibold mb-1">&#129534; Export CSV Watchlist</div>
+              <p class="text-xs text-muted mb-2">Kolom: Ticker, Nama, Harga, Fair Value, MoS%, Grade, Return 5Y, Tahun LK, Terakhir disimpan (siap Excel / Google Sheets).</p>
+              <div class="btn-group">
+                <button id="btnDownloadWatchlistCsv" type="button" class="btn btn-secondary btn-sm">&#128202; Export CSV</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="backup-card">
+            <div class="label-row mb-2">
+              <span class="font-semibold">&#9851;&#65039; Restore / Import Backup (.json)</span>
+              <input id="inpBackupFile" type="file" accept=".json,application/json" class="hidden" />
+              <button id="btnPickBackupFile" type="button" class="btn btn-secondary btn-sm">Pilih File .json</button>
+            </div>
+            <textarea id="txtBackupImport" rows="4" class="mono" placeholder="Atau tempel isi file dcf-backup-*.json di sini untuk melihat preview sebelum diterapkan..."></textarea>
+
+            <div id="backupRestorePreview" class="backup-preview hidden mt-2"></div>
+
+            <div class="backup-mode-row mt-2">
+              <label class="backup-radio">
+                <input type="radio" name="backupRestoreMode" value="merge" checked />
+                <span><strong>Gabungkan</strong> (Terbaru menang)</span>
+              </label>
+              <label class="backup-radio">
+                <input type="radio" name="backupRestoreMode" value="replace" />
+                <span><strong>Ganti Semua</strong></span>
+              </label>
+            </div>
+
+            <div class="btn-group justify-end mt-2">
+              <button id="btnApplyBackupRestore" type="button" class="btn btn-primary btn-sm" disabled>Terapkan Restore</button>
+            </div>
+          </div>
+
+          <div id="backupModalLastBackup" class="text-xs text-muted"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: LAPORAN RINGKAS (PDF & SHAREABLE CARD) -->
+  <div id="modalReport" class="modal-overlay hidden">
+    <div class="modal-card modal-wide">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="modal-head">
+        <h3 id="reportModalTitle">&#128196; Laporan Ringkas Valuasi</h3>
+        <button type="button" class="btn btn-ghost btn-sm" data-close="modalReport">Tutup</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-stack">
+          <div class="report-pdf-bar">
+            <div>
+              <div id="reportStockSummary" class="font-semibold text-sm">-</div>
+              <div class="text-xs text-muted">Format A4 rapi (selalu mode terang saat dicetak / Save to PDF).</div>
+            </div>
+            <button id="btnPrintReportPdf" type="button" class="btn btn-primary btn-sm">&#128424;&#65039; Cetak / Simpan PDF (A4)</button>
+          </div>
+
+          <div class="report-card-preview-wrap">
+            <div class="label-row mb-2" style="width:100%">
+              <span class="font-semibold text-xs">Shareable Card (1080 &times; 1350 PNG)</span>
+              <div class="btn-group">
+                <button id="btnShareReportCard" type="button" class="btn btn-secondary btn-sm">&#128228; Bagikan Card</button>
+                <button id="btnDownloadReportCard" type="button" class="btn btn-primary btn-sm">&#128190; Simpan PNG</button>
+              </div>
+            </div>
+            <canvas id="shareCardCanvas" width="1080" height="1350" class="share-card-canvas"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: WATCHLIST ROW ACTIONS MENU (...) -->
+  <div id="modalRowActions" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="modal-head">
+        <h3 id="rowActionsTitle">Aksi Emiten</h3>
+        <button type="button" class="btn btn-ghost btn-sm" data-close="modalRowActions">Tutup</button>
+      </div>
+      <div class="modal-body">
+        <div class="row-actions-list">
+          <button id="btnRowActionReport" type="button" class="btn btn-secondary row-action-btn">&#128196; Laporan Ringkas (PDF &amp; Card)</button>
+          <button id="btnRowActionEdit" type="button" class="btn btn-secondary row-action-btn">&#9998; Edit Data Keuangan</button>
+          <button id="btnRowActionDelete" type="button" class="btn btn-danger row-action-btn">&#128465; Hapus dari Watchlist</button>
         </div>
       </div>
     </div>
@@ -1079,6 +1217,9 @@
 
   <!-- TOAST -->
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <!-- A4 PRINT REPORT CONTAINER (OUTSIDE .app-shell) -->
+  <section id="printReport" class="print-report" aria-hidden="true"></section>
 
   <script type="module" src="/src/ui/app.js"></script>
 </body>

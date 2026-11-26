@@ -45,10 +45,10 @@ export function getCachedQuote(ticker) {
   return null;
 }
 
-async function fetchFromGas(gasUrl, ticker) {
+async function fetchFromGas(gasUrl, ticker, signal) {
   const sep = gasUrl.includes('?') ? '&' : '?';
   const url = `${gasUrl}${sep}ticker=${encodeURIComponent(ticker)}`;
-  const resp = await fetch(url, { method: 'GET' });
+  const resp = await fetch(url, { method: 'GET', signal });
   if (!resp.ok) throw new Error(`GAS HTTP ${resp.status}`);
   const data = await resp.json();
   if (!data || typeof data.price !== 'number' || data.price <= 0) {
@@ -57,8 +57,8 @@ async function fetchFromGas(gasUrl, ticker) {
   return data;
 }
 
-async function fetchFromYahooProxy(ticker) {
-  const resp = await fetch(`/api/quote?ticker=${encodeURIComponent(ticker)}`);
+async function fetchFromYahooProxy(ticker, signal) {
+  const resp = await fetch(`/api/quote?ticker=${encodeURIComponent(ticker)}`, { signal });
   if (!resp.ok) {
     let msg = `API HTTP ${resp.status}`;
     try {
@@ -74,7 +74,11 @@ async function fetchFromYahooProxy(ticker) {
   return data;
 }
 
-export async function fetchLiveQuote(rawTicker, { force = false } = {}) {
+export async function fetchLiveQuote(rawTicker, { force = false, signal } = {}) {
+  if (signal?.aborted) {
+    throw new DOMException('Request aborted', 'AbortError');
+  }
+
   const ticker = String(rawTicker || '').trim().toUpperCase().replace(/\.JK$/i, '');
   if (!ticker) throw new Error('Ticker kosong');
 
@@ -87,15 +91,16 @@ export async function fetchLiveQuote(rawTicker, { force = false } = {}) {
   let data = null;
 
   if (settings.provider === 'gas' && settings.gasUrl) {
-    data = await fetchFromGas(settings.gasUrl, ticker);
+    data = await fetchFromGas(settings.gasUrl, ticker, signal);
   } else if (settings.provider === 'hybrid' && settings.gasUrl) {
     try {
-      data = await fetchFromGas(settings.gasUrl, ticker);
-    } catch {
-      data = await fetchFromYahooProxy(ticker);
+      data = await fetchFromGas(settings.gasUrl, ticker, signal);
+    } catch (err) {
+      if (signal?.aborted || err?.name === 'AbortError') throw err;
+      data = await fetchFromYahooProxy(ticker, signal);
     }
   } else {
-    data = await fetchFromYahooProxy(ticker);
+    data = await fetchFromYahooProxy(ticker, signal);
   }
 
   QUOTE_CACHE.set(ticker, { data, fetchedAt: Date.now() });
